@@ -1,0 +1,62 @@
+=============================================================================
+CONGRESSIONAL DISCLOSED POSITIONING INDEX
+Generated: 2026-03-31
+Window: 730 days ending 2026-03-31
+=============================================================================
+
+POSITIONING SUMMARY
+-----------------------------------------------------------------------------
+Breadth Signal:      NEUTRAL (+8% bias)
+Volume Tilt:         Estimated -$12K equivalent (range-based, lag-adjusted)
+Confidence:          LOW (score: 0.38)
+
+BREADTH METRICS
+-----------------------------------------------------------------------------
+Active Members:      9 (of ~535 in Congress)
+Net Buyers:          5 members (56%)
+Net Sellers:         4 members (44%)
+Breadth Direction:   +1 (buyers - sellers)
+
+VOLUME METRICS (Estimates based on disclosed ranges)
+-----------------------------------------------------------------------------
+Estimated Buy Volume:     ~$33K equivalent
+Estimated Sell Volume:    ~$45K equivalent
+Estimated Net:            ~-$12K equivalent
+
+CONCENTRATION WARNING
+-----------------------------------------------------------------------------
+Top 5 members:       9% of total signal volume
+                     (signal is CONCENTRATED - interpret with caution)
+
+CHAMBER BREAKDOWN
+-----------------------------------------------------------------------------
+House:               50% of signal  |  Breadth: 0% net buyers
+Senate:              50% of signal  |  Breadth: 0% net buyers
+
+CONFIDENCE FACTOR BREAKDOWN
+-----------------------------------------------------------------------------
+Member coverage      0.24
+Transaction volume   0.17
+Resolution quality   0.77
+Timeliness           0.20
+Chamber balance      1.00
+Concentration        0.09
+
+DATA QUALITY
+-----------------------------------------------------------------------------
+Included transactions:    34
+Excluded (asset class):     10 (mutual funds, broad ETFs)
+Excluded (unparseable):      0
+Resolution rate:          88.2% by count, 88.2% by estimated value
+Mean disclosure lag:      45 days (range: 10-90 days)
+
+LIMITATIONS
+-----------------------------------------------------------------------------
+- All amounts are ESTIMATES based on disclosed ranges
+- Disclosure lag means data reflects positions 6-12 weeks old
+- 12% of transactions unresolved to tickers
+- Signal reflects disclosed activity, not intent or prediction
+
+METHODOLOGY: See methodology.md
+DISCLAIMER: Aggregate positioning data only. Not financial advice.
+           Does not measure or imply ethics, compliance, or intent.

@@ -1,0 +1,11 @@
+company_name,ticker,rank,revenue,sector,cik
+Apple Inc.,AAPL,1,394328,Information Technology,0000320193
+Microsoft Corporation,MSFT,2,211915,Information Technology,0000789019
+Amazon.com Inc.,AMZN,3,574785,Consumer Discretionary,0001018724
+UnitedHealth Group Inc.,UNH,4,371622,Health Care,0000731766
+Berkshire Hathaway Inc.,BRK-B,5,364482,Financials,0001067983
+JPMorgan Chase & Co.,JPM,6,172300,Financials,0000019617
+Exxon Mobil Corporation,XOM,7,344582,Energy,0000034088
+CVS Health Corporation,CVS,8,357776,Health Care,0000064803
+Alphabet Inc.,GOOGL,9,307394,Communication Services,0001652044
+Walmart Inc.,WMT,10,648125,Consumer Staples,0000104169

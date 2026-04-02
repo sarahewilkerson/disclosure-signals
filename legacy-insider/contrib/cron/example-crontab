@@ -1,0 +1,32 @@
+# Insider Trading Signal Engine - Example Crontab Configuration
+#
+# To install, edit your crontab: crontab -e
+# Then add the lines below (without the # prefix)
+#
+# Make sure to:
+# 1. Update /path/to/ references to your actual installation path
+# 2. Set the SEC_USER_AGENT environment variable
+# 3. Create the logs directory: mkdir -p /path/to/insidertradingsignal/logs
+
+# Environment variables (set these at the top of your crontab)
+# SEC_USER_AGENT="InsiderSignalEngine/1.0 (your-email@company.com)"
+# PATH=/usr/local/bin:/usr/bin:/bin
+
+# Run full pipeline daily at 6:00 AM
+# 0 6 * * * cd /path/to/insidertradingsignal && /path/to/insidertradingsignal/.venv/bin/python cli.py run --csv fortune500.csv >> logs/insider-signal.log 2>&1
+
+# Alternative: Run individual steps at different times
+# Ingest new filings at 6:00 AM
+# 0 6 * * * cd /path/to/insidertradingsignal && /path/to/insidertradingsignal/.venv/bin/python cli.py ingest --csv fortune500.csv >> logs/ingest.log 2>&1
+
+# Parse and classify at 6:30 AM
+# 30 6 * * * cd /path/to/insidertradingsignal && /path/to/insidertradingsignal/.venv/bin/python cli.py parse >> logs/parse.log 2>&1 && /path/to/insidertradingsignal/.venv/bin/python cli.py classify >> logs/classify.log 2>&1
+
+# Score and generate reports at 7:00 AM
+# 0 7 * * * cd /path/to/insidertradingsignal && /path/to/insidertradingsignal/.venv/bin/python cli.py score >> logs/score.log 2>&1 && /path/to/insidertradingsignal/.venv/bin/python cli.py report >> logs/report.log 2>&1
+
+# Weekly full refresh on Sundays at 2:00 AM (includes more historical filings)
+# 0 2 * * 0 cd /path/to/insidertradingsignal && /path/to/insidertradingsignal/.venv/bin/python cli.py run --csv fortune500.csv --max-filings 200 >> logs/weekly-refresh.log 2>&1
+
+# Clean old log files monthly on the 1st at midnight
+# 0 0 1 * * find /path/to/insidertradingsignal/logs -name "*.log" -mtime +30 -delete

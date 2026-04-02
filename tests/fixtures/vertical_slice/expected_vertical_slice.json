@@ -1,0 +1,23 @@
+{
+  "normalized_count": 3,
+  "source_scores": {
+    "insider:entity:aapl": {
+      "label": "bullish",
+      "score": 1.0
+    },
+    "congress:entity:aapl": {
+      "label": "bullish",
+      "score": 2324.9516123997073
+    },
+    "congress:entity:msft": {
+      "label": "bearish",
+      "score": -13145.779550867268
+    }
+  },
+  "combined_summary": {
+    "combined_count": 1,
+    "blocked_reasons": [
+      "MISSING_COUNTERPART"
+    ]
+  }
+}

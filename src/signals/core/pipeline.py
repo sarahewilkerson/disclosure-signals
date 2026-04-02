@@ -1,0 +1,205 @@
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from pathlib import Path
+
+from signals.combined.service import build_from_derived
+from signals.congress.service import run_legacy_score_into_derived as run_congress_legacy_score_into_derived
+from signals.core.artifacts import ensure_dir, write_json, write_text
+from signals.core.derived_db import get_connection, init_db
+from signals.core.parity import ParityReport
+from signals.insider.service import run_legacy_score_into_derived as run_insider_legacy_score_into_derived
+from signals.reporting.service import build_combined_report, build_source_report
+
+
+@dataclass
+class UnifiedRunResult:
+    insider: dict
+    congress: dict
+    combined: dict
+    reports: dict
+    artifact_paths: dict[str, str]
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def _build_unified_observability(conn, insider_run_id: str, congress_run_id: str, combined_run_id: str, blocked_rows: list[dict]) -> tuple[dict, dict, dict, dict, dict]:
+    normalized_rows = [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT * FROM normalized_transactions
+            WHERE run_id IN (?, ?)
+            ORDER BY id
+            """,
+            (insider_run_id, congress_run_id),
+        ).fetchall()
+    ]
+
+    unresolved_entities = [
+        {
+            "source": row["source"],
+            "source_record_id": row["source_record_id"],
+            "issuer_name": row["issuer_name"],
+            "ticker": row["ticker"],
+            "exclusion_reason_code": row["exclusion_reason_code"],
+        }
+        for row in normalized_rows
+        if not row["entity_key"] or not row["ticker"]
+    ]
+
+    exclusion_histogram: dict[str, int] = {}
+    for row in normalized_rows:
+        code = row["exclusion_reason_code"]
+        if code:
+            exclusion_histogram[code] = exclusion_histogram.get(code, 0) + 1
+
+    blocked_histogram: dict[str, int] = {}
+    for row in blocked_rows:
+        code = row["reason_code"]
+        blocked_histogram[code] = blocked_histogram.get(code, 0) + 1
+
+    source_counts = {
+        "insider": int(conn.execute("SELECT COUNT(*) AS c FROM signal_results WHERE source = 'insider' AND run_id = ?", (insider_run_id,)).fetchone()["c"]),
+        "congress": int(conn.execute("SELECT COUNT(*) AS c FROM signal_results WHERE source = 'congress' AND run_id = ?", (congress_run_id,)).fetchone()["c"]),
+        "combined": int(conn.execute("SELECT COUNT(*) AS c FROM combined_results WHERE run_id = ?", (combined_run_id,)).fetchone()["c"]),
+    }
+
+    run_rows = [
+        {
+            "run_id": row["run_id"],
+            "source": row["source"],
+            "run_type": row["run_type"],
+            "status": row["status"],
+        }
+        for row in conn.execute(
+            "SELECT run_id, source, run_type, status FROM runs WHERE run_id IN (?, ?, ?) ORDER BY started_at DESC",
+            (combined_run_id, congress_run_id, insider_run_id),
+        ).fetchall()
+    ]
+
+    run_summary = {
+        "run_count": len(run_rows),
+        "normalized_count": len(normalized_rows),
+        "source_counts": source_counts,
+        "failed_run_count": int(
+            conn.execute(
+                "SELECT COUNT(*) AS c FROM runs WHERE run_id IN (?, ?, ?) AND status = 'FAILED'",
+                (combined_run_id, congress_run_id, insider_run_id),
+            ).fetchone()["c"]
+        ),
+        "recent_runs": run_rows,
+    }
+
+    parity = ParityReport(
+        structural_ok=source_counts["insider"] > 0 and source_counts["congress"] > 0,
+        analytical_ok=source_counts["insider"] > 0 and source_counts["congress"] > 0,
+        reporting_ok=source_counts["combined"] >= 0,
+        tolerated_deltas={},
+        unexpected_divergences=[],
+    ).to_dict()
+
+    return (
+        run_summary,
+        parity,
+        exclusion_histogram,
+        {"rows": unresolved_entities},
+        {"rows": blocked_rows, "counts": blocked_histogram},
+    )
+
+
+def run_unified_pipeline(
+    repo_root: Path,
+    derived_db_path: str,
+    insider_legacy_db_path: str,
+    congress_legacy_db_path: str,
+    reference_date: datetime,
+    lookback_window: int,
+    artifact_dir: Path | None = None,
+) -> UnifiedRunResult:
+    insider = run_insider_legacy_score_into_derived(
+        repo_root=repo_root,
+        derived_db_path=derived_db_path,
+        legacy_db_path=insider_legacy_db_path,
+        reference_date=reference_date,
+    )
+    congress = run_congress_legacy_score_into_derived(
+        repo_root=repo_root,
+        derived_db_path=derived_db_path,
+        legacy_db_path=congress_legacy_db_path,
+        window_days=lookback_window,
+        reference_date=reference_date,
+    )
+    combined = build_from_derived(repo_root, derived_db_path, lookback_window=lookback_window)
+
+    init_db(derived_db_path)
+    with get_connection(derived_db_path) as conn:
+        insider_text, insider_payload = build_source_report(conn, "insider", run_id=insider.run_id)
+        congress_text, congress_payload = build_source_report(conn, "congress", run_id=congress.run_id)
+        combined_text, combined_payload = build_combined_report(conn, run_id=combined.run_id, blocked=combined.blocked_rows)
+        (
+            run_summary,
+            parity_report,
+            exclusion_histogram,
+            unresolved_entities,
+            combined_block_report,
+        ) = _build_unified_observability(
+            conn,
+            insider.run_id,
+            congress.run_id,
+            combined.run_id,
+            combined.blocked_rows,
+        )
+
+    reporting_ok = (
+        len(insider_payload["source_results"]) == insider.imported_result_count
+        and len(congress_payload["source_results"]) == congress.imported_result_count
+        and len(combined_payload["combined_results"]) == combined.combined_count
+    )
+    parity_report["structural_ok"] = insider.parity["normalized_match"] and congress.parity["normalized_match"]
+    parity_report["analytical_ok"] = insider.parity["result_match"] and congress.parity["result_match"]
+    parity_report["reporting_ok"] = reporting_ok
+    if not reporting_ok:
+        parity_report["unexpected_divergences"].append("run-scoped report counts do not match imported result counts")
+
+    artifact_paths: dict[str, str] = {}
+    if artifact_dir is not None:
+        base = ensure_dir(artifact_dir)
+        artifact_paths = {
+            "run_summary": str(write_json(base / "run_summary.json", {
+                **run_summary,
+                "insider": insider.to_dict(),
+                "congress": congress.to_dict(),
+                "combined": combined.to_dict(),
+            })),
+            "parity_report": str(write_json(base / "parity_report.json", {
+                **parity_report,
+                "legacy_parity": {
+                    "insider": insider.parity,
+                    "congress": congress.parity,
+                },
+            })),
+            "exclusion_histogram": str(write_json(base / "exclusion_histogram.json", exclusion_histogram)),
+            "unresolved_entities": str(write_json(base / "unresolved_entities.json", unresolved_entities)),
+            "combined_block_report": str(write_json(base / "combined_block_report.json", combined_block_report)),
+            "insider_report_json": str(write_json(base / "insider_report.json", insider_payload)),
+            "congress_report_json": str(write_json(base / "congress_report.json", congress_payload)),
+            "combined_report_json": str(write_json(base / "combined_report.json", combined_payload)),
+            "insider_report_text": str(write_text(base / "insider_report.txt", insider_text)),
+            "congress_report_text": str(write_text(base / "congress_report.txt", congress_text)),
+            "combined_report_text": str(write_text(base / "combined_report.txt", combined_text)),
+        }
+
+    return UnifiedRunResult(
+        insider=insider.to_dict(),
+        congress=congress.to_dict(),
+        combined=combined.to_dict(),
+        reports={
+            "insider": insider_payload,
+            "congress": congress_payload,
+            "combined": combined_payload,
+        },
+        artifact_paths=artifact_paths,
+    )

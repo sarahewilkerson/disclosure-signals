@@ -1,0 +1,2 @@
+"""Insider vertical-slice adapters."""
+

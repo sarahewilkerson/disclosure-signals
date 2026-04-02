@@ -1,0 +1,2 @@
+"""Congress vertical-slice adapters."""
+

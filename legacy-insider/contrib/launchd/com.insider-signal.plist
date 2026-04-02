@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.insider-signal</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <!-- Update these paths to match your installation -->
+        <string>/path/to/insidertradingsignal/.venv/bin/python</string>
+        <string>/path/to/insidertradingsignal/cli.py</string>
+        <string>run</string>
+        <string>--csv</string>
+        <string>/path/to/insidertradingsignal/fortune500.csv</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/path/to/insidertradingsignal</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>SEC_USER_AGENT</key>
+        <string>InsiderSignalEngine/1.0 (your-email@company.com)</string>
+    </dict>
+
+    <!-- Run daily at 6:00 AM -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>6</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- Log output -->
+    <key>StandardOutPath</key>
+    <string>/path/to/insidertradingsignal/logs/insider-signal.log</string>
+    <key>StandardErrorPath</key>
+    <string>/path/to/insidertradingsignal/logs/insider-signal-error.log</string>
+
+    <!-- Restart policy -->
+    <key>KeepAlive</key>
+    <false/>
+
+    <!-- Nice level (lower priority) -->
+    <key>Nice</key>
+    <integer>10</integer>
+</dict>
+</plist>
+<!--
+Installation:
+1. Copy this file to ~/Library/LaunchAgents/
+2. Update all /path/to/ references to your actual installation path
+3. Update SEC_USER_AGENT with your email
+4. Create the logs directory: mkdir -p /path/to/insidertradingsignal/logs
+5. Load the job: launchctl load ~/Library/LaunchAgents/com.insider-signal.plist
+6. Check status: launchctl list | grep insider
+
+To unload:
+    launchctl unload ~/Library/LaunchAgents/com.insider-signal.plist
+
+To run manually:
+    launchctl start com.insider-signal
+-->

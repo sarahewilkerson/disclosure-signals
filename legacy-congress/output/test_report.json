@@ -1,0 +1,47 @@
+{
+  "metadata": {
+    "generated_at": "2026-03-31T12:40:24.990935",
+    "window_days": 730,
+    "window_end": "2026-03-31T12:40:24.990936"
+  },
+  "positioning": {
+    "breadth_pct": 0.08333333333333333,
+    "buyers": 5,
+    "sellers": 4,
+    "neutral": 0,
+    "unique_members": 9,
+    "volume_net": -11826.877834226832,
+    "volume_buy": 33122.39831937267,
+    "volume_sell": 44949.2761535995,
+    "concentration_top5": 0.08668570444802182,
+    "is_concentrated": true,
+    "members_capped": 0,
+    "mean_staleness": 0.2
+  },
+  "confidence": {
+    "score": 0.38454831021265784,
+    "tier": "LOW",
+    "factors": {
+      "member_coverage": 0.24,
+      "transaction_volume": 0.17,
+      "resolution_quality": 0.7727272727272727,
+      "timeliness": 0.2,
+      "balance": 1.0,
+      "concentration": 0.08668570444802182
+    }
+  },
+  "quality": {
+    "included_transactions": 34,
+    "excluded_asset_class": 10,
+    "excluded_unparseable": 0,
+    "resolution_rate_count": 0.8823529411764706,
+    "resolution_rate_value": 0.8823529411764706,
+    "mean_disclosure_lag": 45
+  },
+  "chamber_breakdown": {
+    "house_pct": 0.5,
+    "house_breadth": 0.0,
+    "senate_pct": 0.5,
+    "senate_breadth": 0.0
+  }
+}

@@ -1,0 +1,67 @@
+<?xml version="1.0"?>
+<ownershipDocument>
+    <schemaVersion>X0407</schemaVersion>
+    <documentType>4</documentType>
+    <periodOfReport>2024-07-01</periodOfReport>
+    <issuer>
+        <issuerCik>0000789019</issuerCik>
+        <issuerName>MICROSOFT CORP</issuerName>
+        <issuerTradingSymbol>MSFT</issuerTradingSymbol>
+    </issuer>
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0005555555</rptOwnerCik>
+            <rptOwnerName>JOHNSON BOB</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerRelationship>
+            <isDirector>0</isDirector>
+            <isOfficer>1</isOfficer>
+            <isTenPercentOwner>0</isTenPercentOwner>
+            <isOther>0</isOther>
+            <officerTitle>President</officerTitle>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+    <nonDerivativeTable>
+        <nonDerivativeTransaction>
+            <securityTitle><value>Common Stock</value></securityTitle>
+            <transactionDate><value>2024-07-01</value></transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>S</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares><value>20000</value></transactionShares>
+                <transactionPricePerShare><value>450.00</value></transactionPricePerShare>
+                <transactionAcquiredDisposedCode><value>D</value></transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction><value>80000</value></sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+    </nonDerivativeTable>
+    <derivativeTable>
+        <derivativeTransaction>
+            <securityTitle><value>Employee Stock Option</value></securityTitle>
+            <conversionOrExercisePrice><value>300.00</value></conversionOrExercisePrice>
+            <transactionDate><value>2024-07-01</value></transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>M</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares><value>20000</value></transactionShares>
+                <transactionPricePerShare><value>0</value></transactionPricePerShare>
+                <transactionAcquiredDisposedCode><value>D</value></transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <underlyingSecurity>
+                <underlyingSecurityTitle><value>Common Stock</value></underlyingSecurityTitle>
+                <underlyingSecurityShares><value>20000</value></underlyingSecurityShares>
+            </underlyingSecurity>
+        </derivativeTransaction>
+    </derivativeTable>
+</ownershipDocument>

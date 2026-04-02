@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cppi"
+version = "0.1.0"
+description = "Congressional Policy Positioning Index - measures aggregate disclosed congressional portfolio positioning"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "CPPI Contributors"}
+]
+dependencies = [
+    "requests>=2.28.0",
+    "pdfplumber>=0.9.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=4.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+cppi = "cppi.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cppi*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
