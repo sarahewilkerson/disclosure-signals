@@ -10,6 +10,7 @@ from signals.congress.service import (
     get_legacy_status as get_congress_legacy_status,
     run_legacy_score_into_derived as run_congress_legacy_score_into_derived,
 )
+from signals.congress.ingest import ingest_house_ptrs_direct
 from signals.congress.direct_service import run_direct_house_pdfs_into_derived
 from signals.core.derived_db import fetch_failed_runs, get_connection, init_db
 from signals.core.legacy_subprocess import run_legacy_cli
@@ -53,6 +54,10 @@ def default_insider_rewrite_cache() -> Path:
 
 def default_congress_legacy_db() -> Path:
     return repo_root() / "legacy-congress" / "data" / "cppi.db"
+
+
+def default_congress_rewrite_cache() -> Path:
+    return repo_root() / "data" / "rewrite_cache" / "congress"
 
 
 def cmd_slice_run(args):
@@ -339,6 +344,54 @@ def cmd_congress_rewrite_score_house(args):
         )
 
 
+def cmd_congress_rewrite_ingest_house(args):
+    result = ingest_house_ptrs_direct(
+        repo_root=repo_root(),
+        cache_dir=args.cache_dir,
+        days=args.days,
+        max_filings=args.max_filings,
+        force=args.force,
+    )
+    if args.format == "json":
+        print(json.dumps(result.to_dict(), indent=2))
+    else:
+        print(
+            f"congress-direct-house-ingest ptrs={result.ptr_count} downloaded={result.downloaded_count} "
+            f"cached={result.skipped_cached_count} failed={result.failed_count} pdf_dir={result.pdf_dir}"
+        )
+
+
+def cmd_congress_rewrite_run_house(args):
+    ingest = ingest_house_ptrs_direct(
+        repo_root=repo_root(),
+        cache_dir=args.cache_dir,
+        days=args.days,
+        max_filings=args.max_filings,
+        force=args.force,
+    )
+    reference_date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else datetime.now()
+    score = run_direct_house_pdfs_into_derived(
+        repo_root=repo_root(),
+        derived_db_path=args.db,
+        pdf_dir=ingest.pdf_dir,
+        reference_date=reference_date,
+        window_days=args.window,
+        max_files=args.score_max_files,
+    )
+    payload = {
+        "ingest": ingest.to_dict(),
+        "score": score.to_dict(),
+    }
+    if args.format == "json":
+        print(json.dumps(payload, indent=2))
+    else:
+        print(
+            f"congress-direct-house-run ptrs={ingest.ptr_count} downloaded={ingest.downloaded_count} "
+            f"pdf_count={score.pdf_count} normalized={score.imported_normalized_count} "
+            f"results={score.imported_result_count} skipped={score.skipped_count} run_id={score.run_id}"
+        )
+
+
 def cmd_congress_status(args):
     payload = {
         "legacy": get_congress_legacy_status(args.congress_legacy_db),
@@ -586,12 +639,27 @@ def build_parser() -> argparse.ArgumentParser:
     congress_score = congress_sub.add_parser("score", help="Run the legacy congress score flow and import derived entity results")
     congress_score.add_argument("--window", type=int, default=90, help="Lookback window in days")
     congress_score.set_defaults(func=cmd_congress_score)
+    congress_rewrite_ingest_house = congress_sub.add_parser("rewrite-ingest-house", help="Download real House PTR PDFs directly into the rewrite cache without the legacy congress DB")
+    congress_rewrite_ingest_house.add_argument("--cache-dir", default=str(default_congress_rewrite_cache()), help="Rewrite cache root for House PDFs and FD XML")
+    congress_rewrite_ingest_house.add_argument("--days", type=int, default=90, help="Lookback days for FD XML PTR filtering")
+    congress_rewrite_ingest_house.add_argument("--max-filings", type=int, default=None, help="Maximum PTR PDFs to fetch")
+    congress_rewrite_ingest_house.add_argument("--force", action="store_true", help="Force re-download of cached PDFs")
+    congress_rewrite_ingest_house.set_defaults(func=cmd_congress_rewrite_ingest_house)
     congress_rewrite_house = congress_sub.add_parser("rewrite-score-house", help="Run direct congress House PDF parsing/scoring from cached text PDFs without the legacy congress DB")
     congress_rewrite_house.add_argument("--pdf-dir", default=str(repo_root() / "legacy-congress" / "cache" / "pdfs" / "house"), help="Directory containing cached House PTR PDFs")
     congress_rewrite_house.add_argument("--date", default=None, help="Reference date YYYY-MM-DD")
     congress_rewrite_house.add_argument("--window", type=int, default=90, help="Lookback window in days")
     congress_rewrite_house.add_argument("--max-files", type=int, default=None, help="Maximum PDFs to process")
     congress_rewrite_house.set_defaults(func=cmd_congress_rewrite_score_house)
+    congress_rewrite_run_house = congress_sub.add_parser("rewrite-run-house", help="Run direct House PTR download followed by direct House PDF scoring")
+    congress_rewrite_run_house.add_argument("--cache-dir", default=str(default_congress_rewrite_cache()), help="Rewrite cache root for House PDFs and FD XML")
+    congress_rewrite_run_house.add_argument("--days", type=int, default=90, help="Lookback days for FD XML PTR filtering")
+    congress_rewrite_run_house.add_argument("--max-filings", type=int, default=None, help="Maximum PTR PDFs to fetch")
+    congress_rewrite_run_house.add_argument("--force", action="store_true", help="Force re-download of cached PDFs")
+    congress_rewrite_run_house.add_argument("--date", default=None, help="Reference date YYYY-MM-DD")
+    congress_rewrite_run_house.add_argument("--window", type=int, default=90, help="Lookback window in days")
+    congress_rewrite_run_house.add_argument("--score-max-files", type=int, default=None, help="Maximum cached PDFs to score")
+    congress_rewrite_run_house.set_defaults(func=cmd_congress_rewrite_run_house)
     congress_report = congress_sub.add_parser("report", help="Render persisted congress results without recomputing")
     congress_report.set_defaults(func=cmd_source_report, source_name="congress")
     congress_status = congress_sub.add_parser("status", help="Show congress legacy + derived status")
