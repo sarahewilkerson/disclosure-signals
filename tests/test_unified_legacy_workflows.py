@@ -262,14 +262,15 @@ def test_unified_cli_real_legacy_workflows(tmp_path):
         [
             "--db", str(tmp_path / "derived-run.db"),
             "--insider-legacy-db", str(insider_db),
-            "--congress-legacy-db", str(congress_db),
-            "--format", "json",
-            "--artifacts-dir", str(tmp_path / "artifacts"),
-            "run",
-            "--date", "2026-04-02",
-            "--window", "90",
-        ],
-        env,
+                "--congress-legacy-db", str(congress_db),
+                "--format", "json",
+                "--artifacts-dir", str(tmp_path / "artifacts"),
+                "run",
+                "--legacy",
+                "--date", "2026-04-02",
+                "--window", "90",
+            ],
+            env,
     )
 
     insider_payload = json.loads(insider_score.stdout)
@@ -347,14 +348,15 @@ def test_status_json_includes_recent_runs_and_source_counts(tmp_path):
         repo_root,
         [
             "--db", str(derived_db),
-            "--insider-legacy-db", str(insider_db),
-            "--congress-legacy-db", str(congress_db),
-            "--format", "json",
-            "run",
-            "--date", "2026-04-02",
-            "--window", "90",
-        ],
-        env,
+                "--insider-legacy-db", str(insider_db),
+                "--congress-legacy-db", str(congress_db),
+                "--format", "json",
+                "run",
+                "--legacy",
+                "--date", "2026-04-02",
+                "--window", "90",
+            ],
+            env,
     )
     status = _run_cli(
         repo_root,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from db import get_connection
+from db import get_connection, init_db
 
 
 @dataclass
@@ -21,6 +21,7 @@ class StatusResult:
 
 def get_status(db_path: str | None = None) -> StatusResult:
     """Fetch the legacy insider database status without formatting concerns."""
+    init_db(db_path)
     with get_connection(db_path) as conn:
         companies = conn.execute("SELECT COUNT(*) as c FROM companies").fetchone()["c"]
         filings = conn.execute("SELECT COUNT(*) as c FROM filings").fetchone()["c"]
@@ -50,4 +51,3 @@ def get_status(db_path: str | None = None) -> StatusResult:
         filing_date_latest=latest,
         parse_errors=errors,
     )
-
