@@ -10,6 +10,7 @@ from signals.congress.service import (
     get_legacy_status as get_congress_legacy_status,
     run_legacy_score_into_derived as run_congress_legacy_score_into_derived,
 )
+from signals.congress.direct_service import run_direct_house_pdfs_into_derived
 from signals.core.derived_db import fetch_failed_runs, get_connection, init_db
 from signals.core.legacy_subprocess import run_legacy_cli
 from signals.core.pipeline import run_unified_pipeline
@@ -194,6 +195,37 @@ def cmd_insider_rewrite_ingest(args):
         )
 
 
+def cmd_insider_rewrite_run(args):
+    reference_date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else datetime.now()
+    ingest_result = ingest_universe_direct(
+        csv_path=args.csv,
+        user_agent=args.sec_user_agent,
+        cache_dir=args.cache_dir,
+        max_filings_per_company=args.max_filings,
+        start_date=args.start_date,
+        end_date=args.end_date,
+    )
+    score_result = run_direct_xml_into_derived(
+        repo_root=repo_root(),
+        derived_db_path=args.db,
+        xml_dir=ingest_result["filings_dir"],
+        reference_date=reference_date,
+    )
+    payload = {
+        "ingest": ingest_result,
+        "score": score_result.to_dict(),
+    }
+    if args.format == "json":
+        print(json.dumps(payload, indent=2))
+    else:
+        print(
+            f"insider-direct-run companies={ingest_result['companies_processed']} "
+            f"downloaded={ingest_result['total_new_filings']} "
+            f"xml_count={score_result.xml_count} normalized={score_result.imported_normalized_count} "
+            f"results={score_result.imported_result_count} run_id={score_result.run_id}"
+        )
+
+
 def cmd_insider_status(args):
     payload = {
         "legacy": get_insider_legacy_status(args.insider_legacy_db),
@@ -283,6 +315,27 @@ def cmd_congress_score(args):
         print(
             f"congress imported_normalized={result.imported_normalized_count} "
             f"imported_results={result.imported_result_count} run_id={result.run_id}"
+        )
+
+
+def cmd_congress_rewrite_score_house(args):
+    reference_date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else datetime.now()
+    result = run_direct_house_pdfs_into_derived(
+        repo_root=repo_root(),
+        derived_db_path=args.db,
+        pdf_dir=args.pdf_dir,
+        reference_date=reference_date,
+        window_days=args.window,
+        max_files=args.max_files,
+    )
+    if args.format == "json":
+        print(json.dumps(result.to_dict(), indent=2))
+    else:
+        print(
+            f"congress-direct-house pdf_count={result.pdf_count} "
+            f"normalized={result.imported_normalized_count} "
+            f"results={result.imported_result_count} skipped={result.skipped_count} "
+            f"run_id={result.run_id}"
         )
 
 
@@ -501,6 +554,15 @@ def build_parser() -> argparse.ArgumentParser:
     insider_rewrite.add_argument("--xml-dir", default=str(default_insider_xml_cache()), help="Directory containing raw Form 4 XML files")
     insider_rewrite.add_argument("--date", default=None, help="Reference date YYYY-MM-DD")
     insider_rewrite.set_defaults(func=cmd_insider_rewrite_score)
+    insider_rewrite_run = insider_sub.add_parser("rewrite-run", help="Run rewritten insider live SEC ingest followed by rewritten XML-to-derived scoring")
+    insider_rewrite_run.add_argument("--csv", required=True, help="Path to company universe CSV")
+    insider_rewrite_run.add_argument("--cache-dir", default=str(default_insider_rewrite_cache()), help="Cache directory for SEC company map and raw Form 4 XML")
+    insider_rewrite_run.add_argument("--max-filings", type=int, default=None, help="Maximum filings per company")
+    insider_rewrite_run.add_argument("--start-date", dest="start_date", default=None, help="Historical backfill start date")
+    insider_rewrite_run.add_argument("--end-date", dest="end_date", default=None, help="Historical backfill end date")
+    insider_rewrite_run.add_argument("--date", default=None, help="Reference date YYYY-MM-DD")
+    insider_rewrite_run.add_argument("--sec-user-agent", required=True, help="SEC-compliant user agent")
+    insider_rewrite_run.set_defaults(func=cmd_insider_rewrite_run)
     insider_report = insider_sub.add_parser("report", help="Render persisted insider results without recomputing")
     insider_report.set_defaults(func=cmd_source_report, source_name="insider")
     insider_status = insider_sub.add_parser("status", help="Show insider legacy + derived status")
@@ -524,6 +586,12 @@ def build_parser() -> argparse.ArgumentParser:
     congress_score = congress_sub.add_parser("score", help="Run the legacy congress score flow and import derived entity results")
     congress_score.add_argument("--window", type=int, default=90, help="Lookback window in days")
     congress_score.set_defaults(func=cmd_congress_score)
+    congress_rewrite_house = congress_sub.add_parser("rewrite-score-house", help="Run direct congress House PDF parsing/scoring from cached text PDFs without the legacy congress DB")
+    congress_rewrite_house.add_argument("--pdf-dir", default=str(repo_root() / "legacy-congress" / "cache" / "pdfs" / "house"), help="Directory containing cached House PTR PDFs")
+    congress_rewrite_house.add_argument("--date", default=None, help="Reference date YYYY-MM-DD")
+    congress_rewrite_house.add_argument("--window", type=int, default=90, help="Lookback window in days")
+    congress_rewrite_house.add_argument("--max-files", type=int, default=None, help="Maximum PDFs to process")
+    congress_rewrite_house.set_defaults(func=cmd_congress_rewrite_score_house)
     congress_report = congress_sub.add_parser("report", help="Render persisted congress results without recomputing")
     congress_report.set_defaults(func=cmd_source_report, source_name="congress")
     congress_status = congress_sub.add_parser("status", help="Show congress legacy + derived status")
