@@ -14,6 +14,27 @@ class _Obj:
         return dict(self.__dict__)
 
 
+def _signal_row(source: str, subject_key: str, score: float) -> dict:
+    return {
+        "source": source,
+        "scope": "entity",
+        "subject_key": subject_key,
+        "score": score,
+        "label": "bullish" if score > 0 else "bearish",
+        "confidence": 0.9,
+        "as_of_date": "2026-04-02",
+        "lookback_window": 90,
+        "input_count": 1,
+        "included_count": 1,
+        "excluded_count": 0,
+        "explanation": "test",
+        "method_version": "test",
+        "code_version": "test",
+        "run_id": f"{source}-run",
+        "provenance_refs": {},
+    }
+
+
 def test_run_direct_pipeline_composes_direct_flows(tmp_path, monkeypatch):
     repo_root = Path(__file__).resolve().parents[1]
 
@@ -75,7 +96,7 @@ def test_run_direct_pipeline_composes_direct_flows(tmp_path, monkeypatch):
         "signals.core.pipeline.build_source_report",
         lambda conn, source, run_id=None, run_ids=None: (
             "text",
-            {"source_results": [1, 2, 3] if source == "insider" else list(range(12))},
+            {"source_results": [_signal_row("insider", "entity:aapl", 0.4)] if source == "insider" else [_signal_row("congress", "entity:aapl", 0.3)]},
         ),
     )
     monkeypatch.setattr("signals.core.pipeline.build_combined_report", lambda conn, run_id=None, blocked=None: ("text", {"combined_results": [1]}))

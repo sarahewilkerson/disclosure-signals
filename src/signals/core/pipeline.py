@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 
+from signals.combined.diagnostics import build_overlay_diagnostics
 from signals.combined.service import build_from_derived
 from signals.congress.direct_service import run_direct_house_pdfs_into_derived
 from signals.congress.senate_direct import ingest_senate_ptrs_direct, run_direct_senate_html_into_derived
@@ -12,6 +13,7 @@ from signals.congress.ingest import ingest_house_ptrs_direct
 from signals.congress.service import run_legacy_score_into_derived as run_congress_legacy_score_into_derived
 from signals.core.artifacts import ensure_dir, write_json, write_text
 from signals.core.derived_db import get_connection, init_db
+from signals.core.dto import SignalResult
 from signals.core.parity import ParityReport
 from signals.insider.direct_service import run_direct_xml_into_derived
 from signals.insider.ingest import ingest_universe_direct
@@ -33,6 +35,10 @@ class UnifiedRunResult:
 
 def _to_dict(result):
     return result.to_dict() if hasattr(result, "to_dict") else result
+
+
+def _typed_signal_results(rows: list[dict]) -> list[SignalResult]:
+    return [SignalResult(**row) for row in rows]
 
 
 def _build_unified_observability(conn, insider_run_id: str, congress_run_ids: list[str], combined_run_id: str, blocked_rows: list[dict]) -> tuple[dict, dict, dict, dict, dict]:
@@ -158,6 +164,11 @@ def run_unified_pipeline(
         insider_text, insider_payload = build_source_report(conn, "insider", run_id=insider.run_id)
         congress_text, congress_payload = build_source_report(conn, "congress", run_id=congress.run_id)
         combined_text, combined_payload = build_combined_report(conn, run_id=combined.run_id, blocked=combined.blocked_rows)
+        overlay_diagnostics = build_overlay_diagnostics(
+            _typed_signal_results(insider_payload["source_results"]),
+            _typed_signal_results(congress_payload["source_results"]),
+            combined.blocked_rows,
+        )
         (
             run_summary,
             parity_report,
@@ -203,6 +214,7 @@ def run_unified_pipeline(
             "exclusion_histogram": str(write_json(base / "exclusion_histogram.json", exclusion_histogram)),
             "unresolved_entities": str(write_json(base / "unresolved_entities.json", unresolved_entities)),
             "combined_block_report": str(write_json(base / "combined_block_report.json", combined_block_report)),
+            "overlay_diagnostics": str(write_json(base / "overlay_diagnostics.json", overlay_diagnostics)),
             "insider_report_json": str(write_json(base / "insider_report.json", insider_payload)),
             "congress_report_json": str(write_json(base / "congress_report.json", congress_payload)),
             "combined_report_json": str(write_json(base / "combined_report.json", combined_payload)),
@@ -309,6 +321,11 @@ def run_direct_pipeline(
         insider_text, insider_payload = build_source_report(conn, "insider", run_id=insider.run_id)
         congress_text, congress_payload = build_source_report(conn, "congress", run_ids=[house.run_id, senate.run_id])
         combined_text, combined_payload = build_combined_report(conn, run_id=combined.run_id, blocked=combined.blocked_rows)
+        overlay_diagnostics = build_overlay_diagnostics(
+            _typed_signal_results(insider_payload["source_results"]),
+            _typed_signal_results(congress_payload["source_results"]),
+            combined.blocked_rows,
+        )
         (
             run_summary,
             parity_report,
@@ -341,6 +358,7 @@ def run_direct_pipeline(
             "exclusion_histogram": str(write_json(base / "exclusion_histogram.json", exclusion_histogram)),
             "unresolved_entities": str(write_json(base / "unresolved_entities.json", unresolved_entities)),
             "combined_block_report": str(write_json(base / "combined_block_report.json", combined_block_report)),
+            "overlay_diagnostics": str(write_json(base / "overlay_diagnostics.json", overlay_diagnostics)),
             "insider_report_json": str(write_json(base / "insider_report.json", insider_payload)),
             "congress_report_json": str(write_json(base / "congress_report.json", congress_payload)),
             "combined_report_json": str(write_json(base / "combined_report.json", combined_payload)),
