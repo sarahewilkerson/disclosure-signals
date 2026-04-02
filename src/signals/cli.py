@@ -19,6 +19,7 @@ from signals.congress.senate_direct import (
 from signals.core.derived_db import fetch_failed_runs, get_connection, init_db
 from signals.core.legacy_subprocess import run_legacy_cli
 from signals.core.pipeline import run_unified_pipeline
+from signals.core.pipeline import run_direct_pipeline
 from signals.core.vertical_slice import (
     build_combined_fixture,
     derived_status,
@@ -569,6 +570,39 @@ def cmd_run(args):
                 print(f"- {key}: {value}")
 
 
+def cmd_run_direct(args):
+    reference_date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else datetime.now()
+    result = run_direct_pipeline(
+        repo_root=repo_root(),
+        derived_db_path=args.db,
+        insider_csv_path=args.csv,
+        insider_user_agent=args.sec_user_agent,
+        insider_cache_dir=args.insider_cache_dir,
+        congress_cache_dir=args.congress_cache_dir,
+        reference_date=reference_date,
+        lookback_window=args.window,
+        insider_max_filings=args.insider_max_filings,
+        house_days=args.house_days,
+        house_max_filings=args.house_max_filings,
+        senate_days=args.senate_days,
+        senate_max_filings=args.senate_max_filings,
+        artifact_dir=Path(args.artifacts_dir) if args.artifacts_dir else None,
+    )
+    if args.format == "json":
+        print(json.dumps(result.to_dict(), indent=2))
+    else:
+        print(
+            f"run-direct insider_results={result.insider['score']['imported_result_count']} "
+            f"congress_results={result.congress['imported_result_count']} "
+            f"combined={result.combined['combined_count']}"
+        )
+        if result.artifact_paths:
+            print("")
+            print("Artifacts:")
+            for key, value in sorted(result.artifact_paths.items()):
+                print(f"- {key}: {value}")
+
+
 def cmd_status(args):
     result = derived_status(args.db)
     if args.format == "json":
@@ -639,6 +673,20 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--date", default=None, help="Reference date YYYY-MM-DD")
     run_parser.add_argument("--window", type=int, default=90, help="Lookback window in days")
     run_parser.set_defaults(func=cmd_run)
+
+    run_direct = subparsers.add_parser("run-direct", help="Run the direct insider + house + senate rewrite flows and combined build")
+    run_direct.add_argument("--csv", required=True, help="Path to company universe CSV for direct insider ingest")
+    run_direct.add_argument("--sec-user-agent", required=True, help="SEC-compliant user agent for direct insider ingest")
+    run_direct.add_argument("--insider-cache-dir", default=str(default_insider_rewrite_cache()), help="Rewrite cache directory for insider SEC XML")
+    run_direct.add_argument("--congress-cache-dir", default=str(default_congress_rewrite_cache()), help="Rewrite cache root for House PDFs, FD XML, and Senate HTML")
+    run_direct.add_argument("--insider-max-filings", type=int, default=None, help="Maximum insider filings per company")
+    run_direct.add_argument("--house-days", type=int, default=90, help="House ingest lookback days")
+    run_direct.add_argument("--house-max-filings", type=int, default=None, help="Maximum House filings to fetch and score")
+    run_direct.add_argument("--senate-days", type=int, default=365, help="Senate ingest lookback days")
+    run_direct.add_argument("--senate-max-filings", type=int, default=None, help="Maximum Senate filings to fetch and score")
+    run_direct.add_argument("--date", default=None, help="Reference date YYYY-MM-DD")
+    run_direct.add_argument("--window", type=int, default=90, help="Lookback window in days")
+    run_direct.set_defaults(func=cmd_run_direct)
 
     slice_parser = subparsers.add_parser("slice", help="Run the narrow vertical slice")
     slice_sub = slice_parser.add_subparsers(dest="slice_command")
