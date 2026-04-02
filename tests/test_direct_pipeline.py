@@ -71,7 +71,13 @@ def test_run_direct_pipeline_composes_direct_flows(tmp_path, monkeypatch):
             return _Cursor()
 
     monkeypatch.setattr("signals.core.pipeline.get_connection", lambda path: _ConnCtx())
-    monkeypatch.setattr("signals.core.pipeline.build_source_report", lambda conn, source, run_id=None: ("text", {"source_results": [1, 2, 3] if source == "insider" else list(range(12))}))
+    monkeypatch.setattr(
+        "signals.core.pipeline.build_source_report",
+        lambda conn, source, run_id=None, run_ids=None: (
+            "text",
+            {"source_results": [1, 2, 3] if source == "insider" else list(range(12))},
+        ),
+    )
     monkeypatch.setattr("signals.core.pipeline.build_combined_report", lambda conn, run_id=None, blocked=None: ("text", {"combined_results": [1]}))
 
     result = run_direct_pipeline(

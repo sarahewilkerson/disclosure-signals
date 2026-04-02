@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import io
-import sys
 import zipfile
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
@@ -10,27 +9,11 @@ from xml.etree import ElementTree as ET
 
 import requests
 
-from signals.core.legacy_loader import load_module
+from signals.congress.house_connector import HouseConnector
+from signals.core.retry import retry_call
 
 
 HOUSE_FD_ZIP_URL = "https://disclosures-clerk.house.gov/public_disc/financial-pdfs/{year}FD.ZIP"
-
-
-_HOUSE_CONNECTOR_MODULE = None
-
-
-def _house_connector_class(repo_root: Path):
-    global _HOUSE_CONNECTOR_MODULE
-    if _HOUSE_CONNECTOR_MODULE is None:
-        legacy_root = repo_root / "legacy-congress"
-        if str(legacy_root) not in sys.path:
-            sys.path.insert(0, str(legacy_root))
-        _HOUSE_CONNECTOR_MODULE = load_module(
-            "signals_legacy_congress_house_connector_direct",
-            str(legacy_root / "cppi" / "connectors" / "house.py"),
-        )
-    return _HOUSE_CONNECTOR_MODULE.HouseConnector
-
 
 @dataclass
 class DirectHouseIngestResult:
@@ -57,7 +40,12 @@ def _download_fd_xml_ptrs(years: list[int], cache_dir: Path) -> list[dict]:
             xml_content = xml_cache.read_text()
         else:
             url = HOUSE_FD_ZIP_URL.format(year=year)
-            response = requests.get(url, timeout=60)
+            response = retry_call(
+                lambda: requests.get(url, timeout=60),
+                attempts=3,
+                backoff_seconds=1.0,
+                retry_on=(requests.RequestException,),
+            )
             response.raise_for_status()
             with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
                 xml_filename = f"{year}FD.xml"
@@ -131,7 +119,6 @@ def ingest_house_ptrs_direct(
     if max_filings is not None:
         ptrs = ptrs[:max_filings]
 
-    HouseConnector = _house_connector_class(repo_root)
     house = HouseConnector(cache_dir=cache_root, request_delay=0.25)
 
     downloaded = 0

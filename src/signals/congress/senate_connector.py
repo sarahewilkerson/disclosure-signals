@@ -10,6 +10,8 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
+from signals.core.retry import retry_call
+
 
 logger = logging.getLogger(__name__)
 
@@ -65,19 +67,44 @@ class SenateConnector:
         self._last_request_time = time.time()
 
     def _get(self, url: str, **kwargs) -> requests.Response:
-        self._rate_limit()
-        return self.session.get(url, timeout=self.timeout, **kwargs)
+        def _request() -> requests.Response:
+            self._rate_limit()
+            response = self.session.get(url, timeout=self.timeout, **kwargs)
+            response.raise_for_status()
+            return response
+
+        return retry_call(
+            _request,
+            attempts=3,
+            backoff_seconds=1.0,
+            retry_on=(requests.RequestException,),
+            should_retry=lambda exc: not isinstance(exc, requests.HTTPError)
+            or exc.response is None
+            or exc.response.status_code >= 500,
+        )
 
     def _post(self, url: str, data: dict, **kwargs) -> requests.Response:
-        self._rate_limit()
-        return self.session.post(url, data=data, timeout=self.timeout, **kwargs)
+        def _request() -> requests.Response:
+            self._rate_limit()
+            response = self.session.post(url, data=data, timeout=self.timeout, **kwargs)
+            response.raise_for_status()
+            return response
+
+        return retry_call(
+            _request,
+            attempts=3,
+            backoff_seconds=1.0,
+            retry_on=(requests.RequestException,),
+            should_retry=lambda exc: not isinstance(exc, requests.HTTPError)
+            or exc.response is None
+            or exc.response.status_code >= 500,
+        )
 
     def establish_session(self) -> bool:
         if self._session_established:
             return True
         try:
             response = self._get(self.HOME_URL)
-            response.raise_for_status()
             soup = BeautifulSoup(response.text, "lxml")
             csrf_input = soup.find("input", {"name": "csrfmiddlewaretoken"})
             if not csrf_input:
@@ -119,7 +146,6 @@ class SenateConnector:
                 if not self.establish_session():
                     return None
                 response = self._get(self.get_ptr_url(uuid))
-            response.raise_for_status()
             if len(response.text) < 1000:
                 return None
             cache_path.write_text(response.text, encoding="utf-8")

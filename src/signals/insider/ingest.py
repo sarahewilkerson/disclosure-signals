@@ -10,6 +10,8 @@ from pathlib import Path
 
 import requests
 
+from signals.core.retry import retry_call
+
 
 SEC_BASE_URL = "https://www.sec.gov"
 SEC_DATA_URL = "https://data.sec.gov"
@@ -35,24 +37,22 @@ class DirectEdgarClient:
 
     def get(self, url: str, timeout: int = 30, retries: int | None = None) -> requests.Response:
         retries = retries if retries is not None else SEC_MAX_RETRIES
-        last_error = None
-        for attempt in range(retries):
+        def _request() -> requests.Response:
             self._throttle()
-            try:
-                resp = self.session.get(url, timeout=timeout)
-                self._last_request_time = time.time()
-                resp.raise_for_status()
-                return resp
-            except requests.HTTPError as exc:
-                self._last_request_time = time.time()
-                if exc.response is not None and 400 <= exc.response.status_code < 500:
-                    raise
-                last_error = exc
-            except requests.RequestException as exc:
-                self._last_request_time = time.time()
-                last_error = exc
-            time.sleep(2 ** (attempt + 1))
-        raise last_error
+            resp = self.session.get(url, timeout=timeout)
+            self._last_request_time = time.time()
+            resp.raise_for_status()
+            return resp
+
+        return retry_call(
+            _request,
+            attempts=retries,
+            backoff_seconds=2.0,
+            retry_on=(requests.RequestException,),
+            should_retry=lambda exc: not isinstance(exc, requests.HTTPError)
+            or exc.response is None
+            or exc.response.status_code >= 500,
+        )
 
 
 def load_company_tickers_map(client: DirectEdgarClient, cache_path: Path) -> dict[str, dict]:

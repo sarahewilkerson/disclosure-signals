@@ -24,7 +24,7 @@ def test_direct_house_ingest_uses_downloaded_ptr_metadata(monkeypatch, tmp_path)
             path.write_bytes(b"%PDF-1.4 fake")
             return path
 
-    monkeypatch.setattr("signals.congress.ingest._house_connector_class", lambda repo_root: FakeConnector)
+    monkeypatch.setattr("signals.congress.ingest.HouseConnector", FakeConnector)
 
     result = ingest_house_ptrs_direct(
         repo_root=Path(__file__).resolve().parents[1],

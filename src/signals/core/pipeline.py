@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -240,56 +241,73 @@ def run_direct_pipeline(
     senate_max_filings: int | None = None,
     artifact_dir: Path | None = None,
 ) -> UnifiedRunResult:
-    insider_ingest = ingest_universe_direct(
-        csv_path=insider_csv_path,
-        user_agent=insider_user_agent,
-        cache_dir=insider_cache_dir,
-        max_filings_per_company=insider_max_filings,
-        start_date=None,
-        end_date=None,
-    )
-    insider = run_direct_xml_into_derived(
-        repo_root=repo_root,
-        derived_db_path=derived_db_path,
-        xml_dir=insider_ingest["filings_dir"],
-        reference_date=reference_date,
-    )
-    house_ingest = ingest_house_ptrs_direct(
-        repo_root=repo_root,
-        cache_dir=congress_cache_dir,
-        days=house_days,
-        max_filings=house_max_filings,
-        force=False,
-    )
-    house = run_direct_house_pdfs_into_derived(
-        repo_root=repo_root,
-        derived_db_path=derived_db_path,
-        pdf_dir=house_ingest.pdf_dir,
-        reference_date=reference_date,
-        window_days=lookback_window,
-        max_files=house_max_filings,
-    )
-    senate_ingest = ingest_senate_ptrs_direct(
-        repo_root=repo_root,
-        cache_dir=congress_cache_dir,
-        days=senate_days,
-        max_filings=senate_max_filings,
-        force=False,
-    )
-    senate = run_direct_senate_html_into_derived(
-        repo_root=repo_root,
-        derived_db_path=derived_db_path,
-        html_dir=senate_ingest.html_dir,
-        reference_date=reference_date,
-        window_days=lookback_window,
-        max_files=senate_max_filings,
-    )
+    def _run_insider_branch():
+        insider_ingest = ingest_universe_direct(
+            csv_path=insider_csv_path,
+            user_agent=insider_user_agent,
+            cache_dir=insider_cache_dir,
+            max_filings_per_company=insider_max_filings,
+            start_date=None,
+            end_date=None,
+        )
+        insider = run_direct_xml_into_derived(
+            repo_root=repo_root,
+            derived_db_path=derived_db_path,
+            xml_dir=insider_ingest["filings_dir"],
+            reference_date=reference_date,
+        )
+        return insider_ingest, insider
+
+    def _run_house_branch():
+        house_ingest = ingest_house_ptrs_direct(
+            repo_root=repo_root,
+            cache_dir=congress_cache_dir,
+            days=house_days,
+            max_filings=house_max_filings,
+            force=False,
+        )
+        house = run_direct_house_pdfs_into_derived(
+            repo_root=repo_root,
+            derived_db_path=derived_db_path,
+            pdf_dir=house_ingest.pdf_dir,
+            reference_date=reference_date,
+            window_days=lookback_window,
+            max_files=house_max_filings,
+        )
+        return house_ingest, house
+
+    def _run_senate_branch():
+        senate_ingest = ingest_senate_ptrs_direct(
+            repo_root=repo_root,
+            cache_dir=congress_cache_dir,
+            days=senate_days,
+            max_filings=senate_max_filings,
+            force=False,
+        )
+        senate = run_direct_senate_html_into_derived(
+            repo_root=repo_root,
+            derived_db_path=derived_db_path,
+            html_dir=senate_ingest.html_dir,
+            reference_date=reference_date,
+            window_days=lookback_window,
+            max_files=senate_max_filings,
+        )
+        return senate_ingest, senate
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        insider_future = executor.submit(_run_insider_branch)
+        house_future = executor.submit(_run_house_branch)
+        senate_future = executor.submit(_run_senate_branch)
+        insider_ingest, insider = insider_future.result()
+        house_ingest, house = house_future.result()
+        senate_ingest, senate = senate_future.result()
+
     combined = build_from_derived(repo_root, derived_db_path, lookback_window=lookback_window)
 
     init_db(derived_db_path)
     with get_connection(derived_db_path) as conn:
         insider_text, insider_payload = build_source_report(conn, "insider", run_id=insider.run_id)
-        congress_text, congress_payload = build_source_report(conn, "congress")
+        congress_text, congress_payload = build_source_report(conn, "congress", run_ids=[house.run_id, senate.run_id])
         combined_text, combined_payload = build_combined_report(conn, run_id=combined.run_id, blocked=combined.blocked_rows)
         (
             run_summary,

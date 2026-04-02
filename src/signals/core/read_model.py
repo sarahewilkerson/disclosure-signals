@@ -7,9 +7,28 @@ from signals.core.dto import CombinedResult, SignalResult
 from signals.core.derived_db import fetch_combined_block_events
 
 
-def load_signal_results(conn: Connection, source: str | None = None, run_id: str | None = None) -> list[SignalResult]:
-    if source is None and run_id is None:
+def load_signal_results(
+    conn: Connection,
+    source: str | None = None,
+    run_id: str | None = None,
+    run_ids: list[str] | None = None,
+) -> list[SignalResult]:
+    if run_id is not None and run_ids:
+        raise ValueError("pass either run_id or run_ids, not both")
+    if source is None and run_id is None and not run_ids:
         rows = conn.execute("SELECT * FROM signal_results ORDER BY id").fetchall()
+    elif run_ids:
+        placeholders = ", ".join("?" for _ in run_ids)
+        if source is None:
+            rows = conn.execute(
+                f"SELECT * FROM signal_results WHERE run_id IN ({placeholders}) ORDER BY id",
+                run_ids,
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                f"SELECT * FROM signal_results WHERE source = ? AND run_id IN ({placeholders}) ORDER BY id",
+                (source, *run_ids),
+            ).fetchall()
     elif source is None:
         rows = conn.execute("SELECT * FROM signal_results WHERE run_id = ? ORDER BY id", (run_id,)).fetchall()
     elif run_id is None:
