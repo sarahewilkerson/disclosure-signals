@@ -6,8 +6,12 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 
-from signals.congress.engine import compute_entity_signal
-from signals.congress.legacy_bridge import compute_aggregate, compute_confidence_score, score_transaction
+from signals.congress.engine import (
+    compute_aggregate,
+    compute_confidence_score,
+    compute_entity_signal,
+    score_transaction,
+)
 from signals.congress.parser import parse_house_pdf_text_only
 from signals.core.derived_db import (
     get_connection,

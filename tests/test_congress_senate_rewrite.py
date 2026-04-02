@@ -22,7 +22,7 @@ def test_direct_senate_ingest_downloads_only_electronic(monkeypatch, tmp_path):
             path.write_text("<html></html>")
             return path
 
-    monkeypatch.setattr("signals.congress.senate_direct._senate_connector_class", lambda repo_root: FakeConnector)
+    monkeypatch.setattr("signals.congress.senate_direct.SenateConnector", FakeConnector)
     monkeypatch.setattr(
         "signals.congress.senate_direct._search_senate_ptrs_live",
         lambda senate, start_date, end_date: [Filing("abc", False), Filing("def", True)],
@@ -62,20 +62,7 @@ def test_direct_senate_score_persists_rows(monkeypatch, tmp_path):
         def parse_ptr_transactions(self, html_path):
             return [Txn()]
 
-    class FakeLegacyResolution:
-        @staticmethod
-        def resolve_transaction(asset_name, ticker=None, asset_type_code=None):
-            class Result:
-                resolved_ticker = "AAPL"
-                resolved_company = "Apple Inc."
-                resolution_method = "extracted"
-                resolution_confidence = 0.99
-                include_in_signal = True
-                exclusion_reason = None
-            return Result()
-
-    monkeypatch.setattr("signals.congress.senate_direct._senate_connector_class", lambda repo_root: FakeConnector)
-    monkeypatch.setattr("signals.congress.senate_direct._legacy_resolution_module", lambda repo_root: FakeLegacyResolution)
+    monkeypatch.setattr("signals.congress.senate_direct.SenateConnector", FakeConnector)
 
     db_path = tmp_path / "derived.db"
     result = run_direct_senate_html_into_derived(

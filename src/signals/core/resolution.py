@@ -1,53 +1,46 @@
 from __future__ import annotations
 
+import csv
 import re
 import uuid
+from functools import lru_cache
+from pathlib import Path
 
 from signals.core.dto import CombineEligibilityDecision, EntityResolutionEvent, SignalResult
 from signals.core.enums import OverlayOutcome, ReasonCode, ResolutionStatus
 from signals.core.versioning import RESOLUTION_METHOD_VERSION
-
-
-CANONICAL_BY_TICKER = {
-    "AAPL": {
-        "entity_key": "entity:apple",
-        "instrument_key": "instrument:aapl:common",
-        "ticker": "AAPL",
-        "issuer_name": "Apple Inc.",
-    },
-    "MSFT": {
-        "entity_key": "entity:microsoft",
-        "instrument_key": "instrument:msft:common",
-        "ticker": "MSFT",
-        "issuer_name": "Microsoft Corporation",
-    },
-    "AMZN": {
-        "entity_key": "entity:amazon",
-        "instrument_key": "instrument:amzn:common",
-        "ticker": "AMZN",
-        "issuer_name": "Amazon.com Inc.",
-    },
-}
-
-CANONICAL_BY_CIK = {
-    "0000320193": CANONICAL_BY_TICKER["AAPL"],
-    "0000789019": CANONICAL_BY_TICKER["MSFT"],
-    "0001018724": CANONICAL_BY_TICKER["AMZN"],
-}
-
-NAME_ALIASES = {
-    "apple inc": [CANONICAL_BY_TICKER["AAPL"]],
-    "apple inc.": [CANONICAL_BY_TICKER["AAPL"]],
-    "microsoft corporation": [CANONICAL_BY_TICKER["MSFT"]],
-    "amazon.com inc.": [CANONICAL_BY_TICKER["AMZN"]],
-}
-
 
 def _normalize_name(name: str | None) -> str | None:
     if not name:
         return None
     normalized = re.sub(r"[^a-z0-9]+", " ", name.lower()).strip()
     return normalized or None
+
+
+@lru_cache(maxsize=1)
+def _canonical_indexes() -> tuple[dict[str, dict], dict[str, dict], dict[str, list[dict]]]:
+    csv_path = Path(__file__).resolve().parent / "data" / "canonical_entities.csv"
+    by_ticker: dict[str, dict] = {}
+    by_cik: dict[str, dict] = {}
+    by_name: dict[str, list[dict]] = {}
+    with csv_path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            record = {
+                "entity_key": row["entity_key"],
+                "instrument_key": row["instrument_key"],
+                "ticker": row["ticker"],
+                "issuer_name": row["issuer_name"],
+            }
+            by_ticker[row["ticker"].upper()] = record
+            if row.get("cik"):
+                by_cik[row["cik"]] = record
+            aliases = [row["issuer_name"], *(row.get("name_aliases", "").split("|"))]
+            for alias in aliases:
+                normalized = _normalize_name(alias)
+                if normalized:
+                    by_name.setdefault(normalized, []).append(record)
+    return by_ticker, by_cik, by_name
 
 
 def resolve_entity(
@@ -61,6 +54,7 @@ def resolve_entity(
     instrument_type: str | None,
     run_id: str,
 ) -> EntityResolutionEvent:
+    canonical_by_ticker, canonical_by_cik, name_aliases = _canonical_indexes()
     candidate = None
     confidence = 0.0
     status = ResolutionStatus.UNRESOLVED.value
@@ -73,19 +67,19 @@ def resolve_entity(
         }
     }
 
-    if ticker and ticker.upper() in CANONICAL_BY_TICKER:
-        candidate = CANONICAL_BY_TICKER[ticker.upper()]
+    if ticker and ticker.upper() in canonical_by_ticker:
+        candidate = canonical_by_ticker[ticker.upper()]
         confidence = 0.99
         status = ResolutionStatus.RESOLVED.value
         evidence["match_type"] = "ticker"
-    elif cik and cik in CANONICAL_BY_CIK:
-        candidate = CANONICAL_BY_CIK[cik]
+    elif cik and cik in canonical_by_cik:
+        candidate = canonical_by_cik[cik]
         confidence = 0.97
         status = ResolutionStatus.RESOLVED.value
         evidence["match_type"] = "cik"
     else:
         normalized_name = _normalize_name(issuer_name)
-        matches = NAME_ALIASES.get(normalized_name or "", [])
+        matches = name_aliases.get(normalized_name or "", [])
         if len(matches) == 1:
             candidate = matches[0]
             confidence = 0.90

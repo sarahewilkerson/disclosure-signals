@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import re
-import sys
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
@@ -10,7 +9,15 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 
-from signals.congress.engine import compute_entity_signal
+from signals.congress.constants import AMOUNT_RANGES
+from signals.congress.engine import (
+    compute_aggregate,
+    compute_confidence_score,
+    compute_entity_signal,
+    score_transaction,
+)
+from signals.congress.resolution import resolve_transaction
+from signals.congress.senate_connector import SenateConnector, SenateFiling
 from signals.core.derived_db import (
     get_connection,
     init_db,
@@ -23,7 +30,6 @@ from signals.core.derived_db import (
 from signals.core.dto import NormalizedTransaction, SignalResult
 from signals.core.enums import ReasonCode
 from signals.core.git import git_sha
-from signals.core.legacy_loader import load_module
 from signals.core.resolution import resolve_entity
 from signals.core.runs import make_run, utcnow_iso
 from signals.core.versioning import (
@@ -31,64 +37,6 @@ from signals.core.versioning import (
     NORMALIZATION_METHOD_VERSION,
     RESOLUTION_METHOD_VERSION,
 )
-
-
-_SENATE_CONNECTOR_MODULE = None
-_LEGACY_RESOLUTION_MODULE = None
-_LEGACY_SCORING_MODULE = None
-_LEGACY_PARSING_MODULE = None
-
-
-def _senate_connector_class(repo_root: Path):
-    global _SENATE_CONNECTOR_MODULE
-    if _SENATE_CONNECTOR_MODULE is None:
-        legacy_root = repo_root / "legacy-congress"
-        if str(legacy_root) not in sys.path:
-            sys.path.insert(0, str(legacy_root))
-        _SENATE_CONNECTOR_MODULE = load_module(
-            "signals_legacy_congress_senate_connector_direct",
-            str(legacy_root / "cppi" / "connectors" / "senate.py"),
-        )
-    return _SENATE_CONNECTOR_MODULE.SenateConnector
-
-
-def _legacy_resolution_module(repo_root: Path):
-    global _LEGACY_RESOLUTION_MODULE
-    if _LEGACY_RESOLUTION_MODULE is None:
-        legacy_root = repo_root / "legacy-congress"
-        if str(legacy_root) not in sys.path:
-            sys.path.insert(0, str(legacy_root))
-        _LEGACY_RESOLUTION_MODULE = load_module(
-            "signals_legacy_congress_resolution_direct",
-            str(legacy_root / "cppi" / "resolution.py"),
-        )
-    return _LEGACY_RESOLUTION_MODULE
-
-
-def _legacy_scoring_module(repo_root: Path):
-    global _LEGACY_SCORING_MODULE
-    if _LEGACY_SCORING_MODULE is None:
-        legacy_root = repo_root / "legacy-congress"
-        if str(legacy_root) not in sys.path:
-            sys.path.insert(0, str(legacy_root))
-        _LEGACY_SCORING_MODULE = load_module(
-            "signals_legacy_congress_scoring_direct",
-            str(legacy_root / "cppi" / "scoring.py"),
-        )
-    return _LEGACY_SCORING_MODULE
-
-
-def _legacy_parsing_module(repo_root: Path):
-    global _LEGACY_PARSING_MODULE
-    if _LEGACY_PARSING_MODULE is None:
-        legacy_root = repo_root / "legacy-congress"
-        if str(legacy_root) not in sys.path:
-            sys.path.insert(0, str(legacy_root))
-        _LEGACY_PARSING_MODULE = load_module(
-            "signals_legacy_congress_parsing_amounts_direct",
-            str(legacy_root / "cppi" / "parsing.py"),
-        )
-    return _LEGACY_PARSING_MODULE
 
 
 @dataclass
@@ -159,8 +107,7 @@ def _normalize_txn_type(raw: str | None) -> str:
 def _parse_amount_range(repo_root: Path, amount_range: str | None) -> tuple[int | None, int | None]:
     if not amount_range:
         return None, None
-    parsing = _legacy_parsing_module(repo_root)
-    for range_text, bounds in parsing.AMOUNT_RANGES.items():
+    for range_text, bounds in AMOUNT_RANGES.items():
         if range_text in amount_range:
             return bounds
     return None, None
@@ -174,7 +121,6 @@ def ingest_senate_ptrs_direct(
     max_filings: int | None = None,
     force: bool = False,
 ) -> DirectSenateIngestResult:
-    SenateConnector = _senate_connector_class(repo_root)
     senate = SenateConnector(cache_dir=Path(cache_dir), request_delay=0.25)
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
@@ -253,7 +199,6 @@ def _search_senate_ptrs_live(senate, *, start_date: datetime, end_date: datetime
 
 def _parse_senate_json_rows(rows: list[list[str]]):
     filings = []
-    filing_cls = _SENATE_CONNECTOR_MODULE.SenateFiling if _SENATE_CONNECTOR_MODULE is not None else None
     for row in rows:
         if len(row) < 5:
             continue
@@ -271,26 +216,16 @@ def _parse_senate_json_rows(rows: list[list[str]]):
         except Exception:
             pass
         report_url = f"https://efdsearch.senate.gov/search/view/{kind}/{filing_id}/"
-        if filing_cls is not None:
-            filings.append(
-                filing_cls(
-                    filing_id=filing_id,
-                    filer_name=filer_name,
-                    state=None,
-                    filing_date=filing_date,
-                    report_url=report_url,
-                    is_paper=is_paper,
-                )
+        filings.append(
+            SenateFiling(
+                filing_id=filing_id,
+                filer_name=filer_name,
+                state=None,
+                filing_date=filing_date,
+                report_url=report_url,
+                is_paper=is_paper,
             )
-        else:
-            filings.append(type("SenateFilingRow", (), {
-                "filing_id": filing_id,
-                "filer_name": filer_name,
-                "state": None,
-                "filing_date": filing_date,
-                "report_url": report_url,
-                "is_paper": is_paper,
-            })())
+        )
     return filings
 
 
@@ -327,10 +262,7 @@ def run_direct_senate_html_into_derived(
         },
     )
 
-    SenateConnector = _senate_connector_class(repo_root)
     senate = SenateConnector(cache_dir=html_root.parent.parent, request_delay=0.0)
-    legacy_resolution = _legacy_resolution_module(repo_root)
-    legacy_scoring = _legacy_scoring_module(repo_root)
 
     normalized_rows: list[NormalizedTransaction] = []
     resolution_events: dict[str, object] = {}
@@ -347,7 +279,7 @@ def run_direct_senate_html_into_derived(
         filing_id = f"senate:{ptr_id}"
         for idx, txn in enumerate(transactions, start=1):
             source_record_id = f"{filing_id}:{idx}"
-            legacy_res = legacy_resolution.resolve_transaction(
+            native_res = resolve_transaction(
                 asset_name=txn.asset_name or "",
                 ticker=txn.ticker,
                 asset_type_code=txn.asset_type,
@@ -356,16 +288,16 @@ def run_direct_senate_html_into_derived(
                 source="congress",
                 source_record_id=source_record_id,
                 source_filing_id=filing_id,
-                ticker=legacy_res.resolved_ticker or txn.ticker,
+                ticker=native_res.resolved_ticker or txn.ticker,
                 cik=None,
-                issuer_name=legacy_res.resolved_company or txn.asset_name,
+                issuer_name=native_res.resolved_company or txn.asset_name,
                 instrument_type=txn.asset_type,
                 run_id=run.run_id,
             )
             resolution_events[source_record_id] = resolution_event
             txn_type = _normalize_txn_type(txn.transaction_type)
             amount_min, amount_max = _parse_amount_range(repo_root, txn.amount_range)
-            include = bool(legacy_res.include_in_signal and resolution_event.ticker and txn_type in {"purchase", "sale", "sale_partial"})
+            include = bool(native_res.include_in_signal and resolution_event.ticker and txn_type in {"purchase", "sale", "sale_partial"})
             normalized = NormalizedTransaction(
                 source="congress",
                 source_record_id=source_record_id,
@@ -398,7 +330,7 @@ def run_direct_senate_html_into_derived(
                 resolution_method_version=RESOLUTION_METHOD_VERSION,
                 include_in_signal=include,
                 exclusion_reason_code=None if include else (ReasonCode.MISSING_TICKER.value if not resolution_event.ticker else ReasonCode.NON_SIGNAL_ASSET.value),
-                exclusion_reason_detail=legacy_res.exclusion_reason,
+                exclusion_reason_detail=native_res.exclusion_reason,
                 provenance_payload={
                     "source_system": "direct-senate-html",
                     "raw_record_id": source_record_id,
@@ -407,11 +339,11 @@ def run_direct_senate_html_into_derived(
                     "amount_range": txn.amount_range,
                     "comment": txn.comment,
                     "resolver_evidence": resolution_event.evidence_payload,
-                    "legacy_resolution": {
-                        "method": legacy_res.resolution_method,
-                        "confidence": legacy_res.resolution_confidence,
-                        "include_in_signal": legacy_res.include_in_signal,
-                        "exclusion_reason": legacy_res.exclusion_reason,
+                    "native_resolution": {
+                        "method": native_res.resolution_method,
+                        "confidence": native_res.resolution_confidence,
+                        "include_in_signal": native_res.include_in_signal,
+                        "exclusion_reason": native_res.exclusion_reason,
                     },
                     "method_versions": {
                         "normalization": NORMALIZATION_METHOD_VERSION,
@@ -428,7 +360,7 @@ def run_direct_senate_html_into_derived(
             if not include or not normalized.ticker:
                 continue
 
-            scored = legacy_scoring.score_transaction(
+            scored = score_transaction(
                 member_id=ptr_id,
                 ticker=normalized.ticker,
                 transaction_type=txn_type,
@@ -446,10 +378,10 @@ def run_direct_senate_html_into_derived(
 
     results: list[tuple[SignalResult, str]] = []
     for subject_key, scored_transactions in scored_by_subject.items():
-        aggregate = legacy_scoring.compute_aggregate(scored_transactions)
+        aggregate = compute_aggregate(scored_transactions)
         total = aggregate.volume_buy + aggregate.volume_sell
         resolution_rate = 1.0 if aggregate.transactions_included else 0.0
-        confidence = legacy_scoring.compute_confidence_score(aggregate, resolution_rate)["composite_score"]
+        confidence = compute_confidence_score(aggregate, resolution_rate)["composite_score"]
         net_score = aggregate.volume_net / total if total else 0.0
         ids = record_ids_by_subject[subject_key]
         signal = compute_entity_signal(
