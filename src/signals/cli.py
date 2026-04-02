@@ -24,6 +24,8 @@ from signals.insider.service import (
     get_legacy_status as get_insider_legacy_status,
     run_legacy_score_into_derived as run_insider_legacy_score_into_derived,
 )
+from signals.insider.direct_service import run_direct_xml_into_derived
+from signals.insider.ingest import ingest_universe_direct
 from signals.reporting.formatters import render_json, render_text
 from signals.reporting.service import build_combined_report, build_source_report
 
@@ -38,6 +40,14 @@ def default_derived_db() -> Path:
 
 def default_insider_legacy_db() -> Path:
     return repo_root() / "legacy-insider" / "insider_signal.db"
+
+
+def default_insider_xml_cache() -> Path:
+    return repo_root() / "legacy-insider" / "cache" / "filings"
+
+
+def default_insider_rewrite_cache() -> Path:
+    return repo_root() / "data" / "rewrite_cache" / "insider"
 
 
 def default_congress_legacy_db() -> Path:
@@ -145,6 +155,42 @@ def cmd_insider_score(args):
         print(
             f"insider imported_normalized={result.imported_normalized_count} "
             f"imported_results={result.imported_result_count} run_id={result.run_id}"
+        )
+
+
+def cmd_insider_rewrite_score(args):
+    reference_date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else datetime.now()
+    result = run_direct_xml_into_derived(
+        repo_root=repo_root(),
+        derived_db_path=args.db,
+        xml_dir=args.xml_dir,
+        reference_date=reference_date,
+    )
+    if args.format == "json":
+        print(json.dumps(result.to_dict(), indent=2))
+    else:
+        print(
+            f"insider-direct xml_count={result.xml_count} "
+            f"imported_normalized={result.imported_normalized_count} "
+            f"imported_results={result.imported_result_count} run_id={result.run_id}"
+        )
+
+
+def cmd_insider_rewrite_ingest(args):
+    result = ingest_universe_direct(
+        csv_path=args.csv,
+        user_agent=args.sec_user_agent,
+        cache_dir=args.cache_dir,
+        max_filings_per_company=args.max_filings,
+        start_date=args.start_date,
+        end_date=args.end_date,
+    )
+    if args.format == "json":
+        print(json.dumps(result, indent=2))
+    else:
+        print(
+            f"insider-direct-ingest companies={result['companies_processed']} "
+            f"downloaded={result['total_new_filings']} cache_dir={result['cache_dir']}"
         )
 
 
@@ -443,6 +489,18 @@ def build_parser() -> argparse.ArgumentParser:
     insider_score = insider_sub.add_parser("score", help="Run the legacy insider score flow and import derived results")
     insider_score.add_argument("--date", default=None, help="Reference date YYYY-MM-DD")
     insider_score.set_defaults(func=cmd_insider_score)
+    insider_rewrite_ingest = insider_sub.add_parser("rewrite-ingest", help="Run the rewritten insider SEC ingest flow without the legacy insider DB")
+    insider_rewrite_ingest.add_argument("--csv", required=True, help="Path to company universe CSV")
+    insider_rewrite_ingest.add_argument("--cache-dir", default=str(default_insider_rewrite_cache()), help="Cache directory for SEC company map and raw Form 4 XML")
+    insider_rewrite_ingest.add_argument("--max-filings", type=int, default=None, help="Maximum filings per company")
+    insider_rewrite_ingest.add_argument("--start-date", dest="start_date", default=None, help="Historical backfill start date")
+    insider_rewrite_ingest.add_argument("--end-date", dest="end_date", default=None, help="Historical backfill end date")
+    insider_rewrite_ingest.add_argument("--sec-user-agent", required=True, help="SEC-compliant user agent")
+    insider_rewrite_ingest.set_defaults(func=cmd_insider_rewrite_ingest)
+    insider_rewrite = insider_sub.add_parser("rewrite-score", help="Run the rewritten insider XML-to-derived score flow without the legacy insider DB")
+    insider_rewrite.add_argument("--xml-dir", default=str(default_insider_xml_cache()), help="Directory containing raw Form 4 XML files")
+    insider_rewrite.add_argument("--date", default=None, help="Reference date YYYY-MM-DD")
+    insider_rewrite.set_defaults(func=cmd_insider_rewrite_score)
     insider_report = insider_sub.add_parser("report", help="Render persisted insider results without recomputing")
     insider_report.set_defaults(func=cmd_source_report, source_name="insider")
     insider_status = insider_sub.add_parser("status", help="Show insider legacy + derived status")
