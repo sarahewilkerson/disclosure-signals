@@ -111,7 +111,7 @@ def run_direct_house_pdfs_into_derived(
         if filing is None:
             skipped_count += 1
             continue
-        if skip_reason == "parse_errors" and not filing.transactions:
+        if skip_reason and not filing.transactions:
             skipped_count += 1
             continue
         for idx, txn in enumerate(filing.transactions, start=1):
