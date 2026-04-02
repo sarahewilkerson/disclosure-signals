@@ -12,6 +12,10 @@ from signals.congress.service import (
 )
 from signals.congress.ingest import ingest_house_ptrs_direct
 from signals.congress.direct_service import run_direct_house_pdfs_into_derived
+from signals.congress.senate_direct import (
+    ingest_senate_ptrs_direct,
+    run_direct_senate_html_into_derived,
+)
 from signals.core.derived_db import fetch_failed_runs, get_connection, init_db
 from signals.core.legacy_subprocess import run_legacy_cli
 from signals.core.pipeline import run_unified_pipeline
@@ -392,6 +396,76 @@ def cmd_congress_rewrite_run_house(args):
         )
 
 
+def cmd_congress_rewrite_ingest_senate(args):
+    result = ingest_senate_ptrs_direct(
+        repo_root=repo_root(),
+        cache_dir=args.cache_dir,
+        days=args.days,
+        max_filings=args.max_filings,
+        force=args.force,
+    )
+    if args.format == "json":
+        print(json.dumps(result.to_dict(), indent=2))
+    else:
+        print(
+            f"congress-direct-senate-ingest searched={result.searched_count} "
+            f"downloaded={result.downloaded_ptr_count} skipped_paper={result.skipped_paper_count} "
+            f"failed={result.failed_count} html_dir={result.html_dir}"
+        )
+
+
+def cmd_congress_rewrite_score_senate(args):
+    reference_date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else datetime.now()
+    result = run_direct_senate_html_into_derived(
+        repo_root=repo_root(),
+        derived_db_path=args.db,
+        html_dir=args.html_dir,
+        reference_date=reference_date,
+        window_days=args.window,
+        max_files=args.max_files,
+    )
+    if args.format == "json":
+        print(json.dumps(result.to_dict(), indent=2))
+    else:
+        print(
+            f"congress-direct-senate html_count={result.html_count} "
+            f"normalized={result.imported_normalized_count} "
+            f"results={result.imported_result_count} skipped={result.skipped_count} "
+            f"run_id={result.run_id}"
+        )
+
+
+def cmd_congress_rewrite_run_senate(args):
+    ingest = ingest_senate_ptrs_direct(
+        repo_root=repo_root(),
+        cache_dir=args.cache_dir,
+        days=args.days,
+        max_filings=args.max_filings,
+        force=args.force,
+    )
+    reference_date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else datetime.now()
+    score = run_direct_senate_html_into_derived(
+        repo_root=repo_root(),
+        derived_db_path=args.db,
+        html_dir=ingest.html_dir,
+        reference_date=reference_date,
+        window_days=args.window,
+        max_files=args.score_max_files,
+    )
+    payload = {
+        "ingest": ingest.to_dict(),
+        "score": score.to_dict(),
+    }
+    if args.format == "json":
+        print(json.dumps(payload, indent=2))
+    else:
+        print(
+            f"congress-direct-senate-run searched={ingest.searched_count} downloaded={ingest.downloaded_ptr_count} "
+            f"html_count={score.html_count} normalized={score.imported_normalized_count} "
+            f"results={score.imported_result_count} skipped={score.skipped_count} run_id={score.run_id}"
+        )
+
+
 def cmd_congress_status(args):
     payload = {
         "legacy": get_congress_legacy_status(args.congress_legacy_db),
@@ -660,6 +734,27 @@ def build_parser() -> argparse.ArgumentParser:
     congress_rewrite_run_house.add_argument("--window", type=int, default=90, help="Lookback window in days")
     congress_rewrite_run_house.add_argument("--score-max-files", type=int, default=None, help="Maximum cached PDFs to score")
     congress_rewrite_run_house.set_defaults(func=cmd_congress_rewrite_run_house)
+    congress_rewrite_ingest_senate = congress_sub.add_parser("rewrite-ingest-senate", help="Download real Senate electronic PTR HTML directly into the rewrite cache without the legacy congress DB")
+    congress_rewrite_ingest_senate.add_argument("--cache-dir", default=str(default_congress_rewrite_cache()), help="Rewrite cache root for Senate HTML")
+    congress_rewrite_ingest_senate.add_argument("--days", type=int, default=90, help="Lookback days for Senate search")
+    congress_rewrite_ingest_senate.add_argument("--max-filings", type=int, default=None, help="Maximum Senate filings to fetch")
+    congress_rewrite_ingest_senate.add_argument("--force", action="store_true", help="Force re-download of cached filings")
+    congress_rewrite_ingest_senate.set_defaults(func=cmd_congress_rewrite_ingest_senate)
+    congress_rewrite_score_senate = congress_sub.add_parser("rewrite-score-senate", help="Run direct congress Senate electronic HTML scoring without the legacy congress DB")
+    congress_rewrite_score_senate.add_argument("--html-dir", default=str(default_congress_rewrite_cache() / "pdfs" / "senate"), help="Directory containing cached Senate PTR HTML files")
+    congress_rewrite_score_senate.add_argument("--date", default=None, help="Reference date YYYY-MM-DD")
+    congress_rewrite_score_senate.add_argument("--window", type=int, default=90, help="Lookback window in days")
+    congress_rewrite_score_senate.add_argument("--max-files", type=int, default=None, help="Maximum HTML files to process")
+    congress_rewrite_score_senate.set_defaults(func=cmd_congress_rewrite_score_senate)
+    congress_rewrite_run_senate = congress_sub.add_parser("rewrite-run-senate", help="Run direct Senate electronic filing download followed by direct Senate scoring")
+    congress_rewrite_run_senate.add_argument("--cache-dir", default=str(default_congress_rewrite_cache()), help="Rewrite cache root for Senate HTML")
+    congress_rewrite_run_senate.add_argument("--days", type=int, default=90, help="Lookback days for Senate search")
+    congress_rewrite_run_senate.add_argument("--max-filings", type=int, default=None, help="Maximum Senate filings to fetch")
+    congress_rewrite_run_senate.add_argument("--force", action="store_true", help="Force re-download of cached filings")
+    congress_rewrite_run_senate.add_argument("--date", default=None, help="Reference date YYYY-MM-DD")
+    congress_rewrite_run_senate.add_argument("--window", type=int, default=90, help="Lookback window in days")
+    congress_rewrite_run_senate.add_argument("--score-max-files", type=int, default=None, help="Maximum cached HTML files to score")
+    congress_rewrite_run_senate.set_defaults(func=cmd_congress_rewrite_run_senate)
     congress_report = congress_sub.add_parser("report", help="Render persisted congress results without recomputing")
     congress_report.set_defaults(func=cmd_source_report, source_name="congress")
     congress_status = congress_sub.add_parser("status", help="Show congress legacy + derived status")
