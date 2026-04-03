@@ -135,7 +135,7 @@ def build_house_quality_metrics(
     }
 
 
-def build_house_candidate_discovery(
+def build_congress_candidate_discovery(
     conn: sqlite3.Connection,
     *,
     run_id: str,
@@ -197,3 +197,12 @@ def build_house_candidate_discovery(
             for item in ordered
         ],
     }
+
+
+def build_house_candidate_discovery(
+    conn: sqlite3.Connection,
+    *,
+    run_id: str,
+    limit: int = 10,
+) -> dict:
+    return build_congress_candidate_discovery(conn, run_id=run_id, limit=limit)

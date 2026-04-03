@@ -76,3 +76,52 @@ def test_direct_senate_score_persists_rows(monkeypatch, tmp_path):
     assert result.html_count == 1
     assert result.imported_normalized_count == 1
     assert result.imported_result_count == 1
+
+
+def test_direct_senate_non_signal_assets_are_not_marked_missing_ticker(monkeypatch, tmp_path):
+    from signals.core.derived_db import get_connection
+
+    html_dir = tmp_path / "pdfs" / "senate"
+    html_dir.mkdir(parents=True)
+    (html_dir / "ptr_abcdef12.html").write_text("<html></html>")
+
+    class Txn:
+        def __init__(self):
+            self.transaction_date = datetime(2026, 3, 1)
+            self.owner = "Self"
+            self.ticker = None
+            self.asset_name = "GS Managed Structured Note Strategy S&P 500 Linked Note"
+            self.asset_type = None
+            self.transaction_type = "Purchase"
+            self.amount_range = "$1,001 - $15,000"
+            self.comment = None
+
+    class FakeConnector:
+        def __init__(self, cache_dir, request_delay):
+            self.cache_dir = html_dir
+
+        def parse_ptr_transactions(self, html_path):
+            return [Txn()]
+
+    monkeypatch.setattr("signals.congress.senate_direct.SenateConnector", FakeConnector)
+
+    db_path = tmp_path / "derived.db"
+    result = run_direct_senate_html_into_derived(
+        repo_root=Path(__file__).resolve().parents[1],
+        derived_db_path=str(db_path),
+        html_dir=str(html_dir),
+        reference_date=datetime(2026, 4, 2),
+        window_days=90,
+        max_files=None,
+    )
+
+    assert result.imported_normalized_count == 1
+    assert result.imported_result_count == 0
+
+    with get_connection(str(db_path)) as conn:
+        row = conn.execute(
+            "select exclusion_reason_code, include_in_signal from normalized_transactions"
+        ).fetchone()
+
+    assert row["exclusion_reason_code"] == "NON_SIGNAL_ASSET"
+    assert row["include_in_signal"] == 0

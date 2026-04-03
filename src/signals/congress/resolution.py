@@ -44,7 +44,27 @@ SECTOR_ETFS = {
 }
 SINGLE_STOCK_ETFS = {"TSLL", "TSLQ", "NVDL", "NVDS", "AAPD", "AAPU", "MSFO", "MSFD", "AMZD", "AMZU", "GOOGL", "GOOLD", "METD", "METU"}
 TREASURY_PATTERNS = [r"treasury", r"t-?bill", r"t-?bond", r"t-?note", r"us\s+gov", r"u\.s\.\s+gov", r"united\s+states.*(?:bond|note|bill)"]
-MUNI_PATTERNS = [r"\bgo\b.*(?:call|bond|bds)", r"municipal", r"\bst\b.*(?:sales|tax|rev)", r"city\s+(?:&|and)", r"county\s+(?:&|and)", r"rev(?:enue)?\s+(?:bond|jr)", r"utx\s+due", r"\bn\s*y\b.*\bgo\b", r"\bgo\s+bds\b", r"\bsch\s+dist\b", r"\barpt\b", r"\bwtr\b", r"\bcnty\b", r"\bohio\b.*\bgo\b", r"\bpa\b.*\brev\b"]
+MUNI_PATTERNS = [
+    r"\bgo\b.*(?:call|bond|bds)",
+    r"\bgo(?=rate/coupon|\b)",
+    r"municipal",
+    r"\bst\b.*(?:sales|tax|rev)",
+    r"city\s+(?:&|and)",
+    r"county\s+(?:&|and)",
+    r"rev(?:enue)?\s+(?:bond|jr)",
+    r"\brev(?=rate/coupon|\b)",
+    r"utx\s+due",
+    r"\bn\s*y\b.*\bgo\b",
+    r"\bgo\s+bds\b",
+    r"\bsch\s+dist\b",
+    r"\barpt\b",
+    r"\bwtr\b",
+    r"\bwastewtr\b",
+    r"\bcnty\b",
+    r"\btpk\b",
+    r"\bohio\b.*\bgo\b",
+    r"\bpa\b.*\brev\b",
+]
 PRIVATE_PATTERNS = [r",\s*llc\b", r",\s*lp\b", r"promissory\s+note", r"private\s+equity", r"venture\s+fund", r"capital\s+fund", r"partners?\s+llc", r"allocate\s+\d{4}\s+lp"]
 MUTUAL_FUND_PATTERNS = [r"\bfund\b(?!.*etf)", r"portfolio", r"retirement", r"401k", r"ira\s+", r"target\s+date", r"money\s+market", r"admiral\s+shares", r"\binstl\b", r"\binst!\b", r"harding\s+loevner", r"dimensional", r"\bdfa\b", r"core\s+equity"]
 ETF_NAME_PATTERNS = [r"\betf\b", r"spdr", r"invesco\s+qqq", r"dow\s+jones", r"trust\s+nysearca", r"total\s+stock\s+market"]

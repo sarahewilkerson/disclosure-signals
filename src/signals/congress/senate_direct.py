@@ -302,6 +302,14 @@ def run_direct_senate_html_into_derived(
                 txn_type = _normalize_txn_type(txn.transaction_type)
                 amount_min, amount_max = _parse_amount_range(repo_root, txn.amount_range)
                 include = bool(native_res.include_in_signal and resolution_event.ticker and txn_type in {"purchase", "sale", "sale_partial"})
+                if include:
+                    exclusion_reason_code = None
+                elif not native_res.include_in_signal:
+                    exclusion_reason_code = ReasonCode.NON_SIGNAL_ASSET.value
+                elif not resolution_event.ticker:
+                    exclusion_reason_code = ReasonCode.MISSING_TICKER.value
+                else:
+                    exclusion_reason_code = ReasonCode.LOW_RESOLUTION_CONFIDENCE.value
                 normalized = NormalizedTransaction(
                     source="congress",
                     source_record_id=source_record_id,
@@ -333,7 +341,7 @@ def run_direct_senate_html_into_derived(
                     resolution_confidence=resolution_event.resolution_confidence,
                     resolution_method_version=RESOLUTION_METHOD_VERSION,
                     include_in_signal=include,
-                    exclusion_reason_code=None if include else (ReasonCode.MISSING_TICKER.value if not resolution_event.ticker else ReasonCode.NON_SIGNAL_ASSET.value),
+                    exclusion_reason_code=exclusion_reason_code,
                     exclusion_reason_detail=native_res.exclusion_reason,
                     provenance_payload={
                         "source_system": "direct-senate-html",
