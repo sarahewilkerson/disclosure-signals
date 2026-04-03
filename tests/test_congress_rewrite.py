@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from signals.congress.direct_service import run_direct_house_pdfs_into_derived
 from signals.congress.house_parser import PaperHouseFilingParser, parse_house_pdf
+from signals.congress.ocr import OCRResult, ocr_pdf
 from signals.core.derived_db import get_connection
 
 
@@ -129,6 +130,63 @@ def test_house_parser_classifies_nothing_to_report(tmp_path, monkeypatch):
     assert filing is not None
     assert filing.transactions == []
     assert reason == "nothing_to_report"
+
+
+def test_ocr_pdf_caches_result(tmp_path, monkeypatch):
+    pdf_path = tmp_path / "8221310.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 fake pdf")
+    cache_dir = tmp_path / "ocr-cache"
+    calls = {"count": 0}
+
+    def fake_uncached(path, language="eng", dpi=300):
+        del path, language, dpi
+        calls["count"] += 1
+        return OCRResult(
+            text="Purchase $1,001 03/01/2026",
+            confidence=0.95,
+            source_format="pdf",
+            page_count=1,
+            warnings=[],
+        )
+
+    monkeypatch.setattr("signals.congress.ocr._ocr_pdf_uncached", fake_uncached)
+
+    first = ocr_pdf(pdf_path, cache_dir=cache_dir)
+    second = ocr_pdf(pdf_path, cache_dir=cache_dir)
+
+    assert calls["count"] == 1
+    assert first.text == second.text
+    assert list(cache_dir.glob("*.json"))
+
+
+def test_house_parser_reuses_cached_ocr_result(tmp_path, monkeypatch):
+    pdf_path = tmp_path / "8221310.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 fake pdf")
+    calls = {"count": 0}
+
+    def fake_uncached(path, language="eng", dpi=300):
+        del path, language, dpi
+        calls["count"] += 1
+        return OCRResult(
+            text="Nothing to report for December 2025. This filing contains no reportable transactions or assets.",
+            confidence=0.9,
+            source_format="pdf",
+            page_count=1,
+            warnings=[],
+        )
+
+    monkeypatch.setattr("signals.congress.house_parser.pdf_has_extractable_text", lambda path: False)
+    monkeypatch.setattr("signals.congress.house_parser.is_tesseract_available", lambda: True)
+    monkeypatch.setattr("signals.congress.ocr._ocr_pdf_uncached", fake_uncached)
+
+    first_filing, first_reason = parse_house_pdf(pdf_path)
+    second_filing, second_reason = parse_house_pdf(pdf_path)
+
+    assert calls["count"] == 1
+    assert first_reason == "nothing_to_report"
+    assert second_reason == "nothing_to_report"
+    assert first_filing is not None
+    assert second_filing is not None
 
 
 def test_house_parser_parses_amendment_letter_line():

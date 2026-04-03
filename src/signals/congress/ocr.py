@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import shutil
 import subprocess
 import tempfile
+from dataclasses import asdict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -99,7 +102,50 @@ def ocr_image(image_path: Path, language: str = "eng", config: str = "") -> OCRR
         )
 
 
-def ocr_pdf(pdf_path: Path, language: str = "eng", dpi: int = 300) -> OCRResult:
+def _default_ocr_cache_dir(pdf_path: Path) -> Path:
+    if pdf_path.parent.name == "house" and pdf_path.parent.parent.name == "pdfs":
+        return pdf_path.parent.parent.parent / "ocr_cache" / "house"
+    return pdf_path.parent / ".ocr_cache"
+
+
+def _pdf_content_hash(pdf_path: Path) -> str:
+    digest = hashlib.sha256()
+    with pdf_path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _ocr_cache_path(pdf_path: Path, cache_dir: Path | None = None) -> Path:
+    target_dir = cache_dir or _default_ocr_cache_dir(pdf_path)
+    return target_dir / f"{_pdf_content_hash(pdf_path)}.json"
+
+
+def load_cached_ocr_result(pdf_path: Path, cache_dir: Path | None = None) -> OCRResult | None:
+    cache_path = _ocr_cache_path(pdf_path, cache_dir)
+    if not cache_path.exists():
+        return None
+    try:
+        payload = json.loads(cache_path.read_text(encoding="utf-8"))
+        return OCRResult(
+            text=payload.get("text", ""),
+            confidence=float(payload.get("confidence", 0.0)),
+            source_format=payload.get("source_format", "pdf"),
+            page_count=int(payload.get("page_count", 0)),
+            warnings=list(payload.get("warnings", [])),
+        )
+    except Exception:
+        return None
+
+
+def save_cached_ocr_result(pdf_path: Path, result: OCRResult, cache_dir: Path | None = None) -> Path:
+    cache_path = _ocr_cache_path(pdf_path, cache_dir)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps(asdict(result), sort_keys=True), encoding="utf-8")
+    return cache_path
+
+
+def _ocr_pdf_uncached(pdf_path: Path, language: str = "eng", dpi: int = 300) -> OCRResult:
     if not HAS_TESSERACT:
         return OCRResult(text="", confidence=0.0, source_format="pdf", page_count=0, warnings=["Tesseract OCR not installed"])
     if not HAS_PDFTOPPM:
@@ -141,3 +187,12 @@ def ocr_pdf(pdf_path: Path, language: str = "eng", dpi: int = 300) -> OCRResult:
         page_count=page_count,
         warnings=warnings,
     )
+
+
+def ocr_pdf(pdf_path: Path, language: str = "eng", dpi: int = 300, cache_dir: Path | None = None) -> OCRResult:
+    cached = load_cached_ocr_result(pdf_path, cache_dir)
+    if cached is not None:
+        return cached
+    result = _ocr_pdf_uncached(pdf_path, language=language, dpi=dpi)
+    save_cached_ocr_result(pdf_path, result, cache_dir)
+    return result
