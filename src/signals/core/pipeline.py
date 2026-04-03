@@ -17,6 +17,7 @@ from signals.core.derived_db import get_connection, init_db
 from signals.core.dto import SignalResult
 from signals.core.parity import ParityReport
 from signals.insider.direct_service import run_direct_xml_into_derived
+from signals.insider.diagnostics import build_insider_candidate_discovery
 from signals.insider.ingest import ingest_universe_direct
 from signals.insider.service import run_legacy_score_into_derived as run_insider_legacy_score_into_derived
 from signals.reporting.service import build_combined_report, build_source_report
@@ -322,6 +323,7 @@ def run_direct_pipeline(
         insider_text, insider_payload = build_source_report(conn, "insider", run_id=insider.run_id)
         congress_text, congress_payload = build_source_report(conn, "congress", run_ids=[house.run_id, senate.run_id])
         combined_text, combined_payload = build_combined_report(conn, run_id=combined.run_id, blocked=combined.blocked_rows)
+        insider_candidate_discovery = build_insider_candidate_discovery(conn, run_id=insider.run_id)
         overlay_diagnostics = build_overlay_diagnostics(
             _typed_signal_results(insider_payload["source_results"]),
             _typed_signal_results(congress_payload["source_results"]),
@@ -358,6 +360,7 @@ def run_direct_pipeline(
                 "house_ingest": house_ingest.to_dict(),
                 "senate_ingest": senate_ingest.to_dict(),
                 "insider": insider.to_dict(),
+                "insider_candidate_discovery": insider_candidate_discovery,
                 "house": house.to_dict(),
                 "senate": senate.to_dict(),
                 "combined": combined.to_dict(),
@@ -369,6 +372,7 @@ def run_direct_pipeline(
             "unresolved_entities": str(write_json(base / "unresolved_entities.json", unresolved_entities)),
             "combined_block_report": str(write_json(base / "combined_block_report.json", combined_block_report)),
             "overlay_diagnostics": str(write_json(base / "overlay_diagnostics.json", overlay_diagnostics)),
+            "insider_candidate_discovery": str(write_json(base / "insider_candidate_discovery.json", insider_candidate_discovery)),
             "house_quality_metrics": str(write_json(base / "house_quality_metrics.json", house_quality_metrics)),
             "house_candidate_discovery": str(write_json(base / "house_candidate_discovery.json", house_candidate_discovery)),
             "insider_report_json": str(write_json(base / "insider_report.json", insider_payload)),
@@ -383,6 +387,7 @@ def run_direct_pipeline(
         insider={
             "ingest": insider_ingest,
             "score": insider.to_dict(),
+            "candidate_discovery": insider_candidate_discovery,
         },
         congress={
             "house_ingest": house_ingest.to_dict(),

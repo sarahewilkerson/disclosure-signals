@@ -96,6 +96,14 @@ def test_run_direct_pipeline_composes_direct_flows(tmp_path, monkeypatch):
         },
     )
     monkeypatch.setattr(
+        "signals.core.pipeline.build_insider_candidate_discovery",
+        lambda conn, run_id: {
+            "run_id": run_id,
+            "candidate_count": 1,
+            "candidates": [{"normalized_name": "unknown issuer", "count": 1, "raw_examples": ["Unknown Issuer"], "filing_ids": ["f1"], "instrument_types": {"Common Stock": 1}, "reason_codes": {"<included>": 1}}],
+        },
+    )
+    monkeypatch.setattr(
         "signals.core.pipeline.build_house_candidate_discovery",
         lambda conn, run_id: {
             "run_id": run_id,
@@ -150,6 +158,7 @@ def test_run_direct_pipeline_composes_direct_flows(tmp_path, monkeypatch):
     )
 
     assert result.insider["score"]["imported_result_count"] == 3
+    assert result.insider["candidate_discovery"]["candidate_count"] == 1
     assert result.congress["imported_result_count"] == 12
     assert result.combined["combined_count"] == 1
     assert result.congress["house_quality_metrics"]["run_id"] == "house-run"
@@ -208,6 +217,14 @@ def test_run_direct_pipeline_writes_house_quality_artifact(tmp_path, monkeypatch
         },
     )
     monkeypatch.setattr(
+        "signals.core.pipeline.build_insider_candidate_discovery",
+        lambda conn, run_id: {
+            "run_id": run_id,
+            "candidate_count": 0,
+            "candidates": [],
+        },
+    )
+    monkeypatch.setattr(
         "signals.core.pipeline.build_house_candidate_discovery",
         lambda conn, run_id: {
             "run_id": run_id,
@@ -258,7 +275,9 @@ def test_run_direct_pipeline_writes_house_quality_artifact(tmp_path, monkeypatch
     )
 
     assert result.artifact_paths["house_quality_metrics"].endswith("house_quality_metrics.json")
+    assert result.artifact_paths["insider_candidate_discovery"].endswith("insider_candidate_discovery.json")
     assert result.artifact_paths["house_candidate_discovery"].endswith("house_candidate_discovery.json")
+    assert (artifacts / "insider_candidate_discovery.json").exists()
     assert (artifacts / "house_quality_metrics.json").exists()
     assert (artifacts / "house_candidate_discovery.json").exists()
     assert result.congress["house_quality_metrics"]["top_signal_like_unresolved_issuers"] == [

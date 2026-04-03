@@ -33,6 +33,7 @@ from signals.insider.service import (
     run_legacy_score_into_derived as run_insider_legacy_score_into_derived,
 )
 from signals.insider.direct_service import run_direct_xml_into_derived
+from signals.insider.diagnostics import build_insider_candidate_discovery
 from signals.insider.ingest import ingest_universe_direct
 from signals.reporting.formatters import render_json, render_text
 from signals.reporting.service import build_combined_report, build_source_report
@@ -248,6 +249,35 @@ def cmd_insider_status(args):
         ["Derived:"] +
         [f"  {k}: {v}" for k, v in payload["derived"].items()]
     ))
+
+
+def cmd_insider_candidate_discovery(args):
+    init_db(args.db)
+    with get_connection(args.db) as conn:
+        run_id = args.run_id
+        if not run_id:
+            row = conn.execute(
+                """
+                SELECT run_id
+                FROM runs
+                WHERE run_type = 'direct_xml_score'
+                ORDER BY started_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+            if row is None:
+                raise SystemExit("no direct_xml_score runs found in derived DB")
+            run_id = row["run_id"]
+        payload = build_insider_candidate_discovery(conn, run_id=run_id, limit=args.limit)
+    if args.format == "json":
+        print(json.dumps(payload, indent=2))
+    else:
+        print(f"insider candidate discovery run_id={payload['run_id']}")
+        for item in payload["candidates"]:
+            print(
+                f"- {item['normalized_name']} count={item['count']} "
+                f"instruments={item['instrument_types']} examples={item['raw_examples']}"
+            )
 
 
 def cmd_insider_parse(args):
@@ -784,6 +814,10 @@ def build_parser() -> argparse.ArgumentParser:
     insider_rewrite_run.set_defaults(func=cmd_insider_rewrite_run)
     insider_report = insider_sub.add_parser("report", help="Render persisted insider results without recomputing")
     insider_report.set_defaults(func=cmd_source_report, source_name="insider")
+    insider_candidates = insider_sub.add_parser("candidate-discovery", help="Show top unresolved insider issuer candidates worth reviewing")
+    insider_candidates.add_argument("--run-id")
+    insider_candidates.add_argument("--limit", type=int, default=10)
+    insider_candidates.set_defaults(func=cmd_insider_candidate_discovery)
     insider_status = insider_sub.add_parser("status", help="Show insider legacy + derived status")
     insider_status.set_defaults(func=cmd_insider_status)
 
