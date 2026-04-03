@@ -19,6 +19,7 @@ from signals.congress.senate_direct import (
 )
 from signals.congress.diagnostics import build_congress_candidate_discovery
 from signals.core.derived_db import fetch_failed_runs, get_connection, init_db
+from signals.core.legacy_loader import legacy_congress_root, legacy_insider_root
 from signals.core.legacy_subprocess import run_legacy_cli
 from signals.core.pipeline import run_unified_pipeline
 from signals.core.pipeline import run_direct_pipeline
@@ -49,7 +50,7 @@ def default_derived_db() -> Path:
 
 
 def default_insider_legacy_db() -> Path:
-    return repo_root() / "legacy-insider" / "insider_signal.db"
+    return legacy_insider_root() / "insider_signal.db"
 
 
 def default_insider_xml_cache() -> Path:
@@ -61,7 +62,7 @@ def default_insider_rewrite_cache() -> Path:
 
 
 def default_congress_legacy_db() -> Path:
-    return repo_root() / "legacy-congress" / "data" / "cppi.db"
+    return legacy_congress_root() / "data" / "cppi.db"
 
 
 def default_congress_rewrite_cache() -> Path:
@@ -294,7 +295,7 @@ def cmd_insider_candidate_discovery(args):
 def cmd_insider_parse(args):
     _compat_warning("insider parse")
     result = run_legacy_cli(
-        repo_root() / "legacy-insider" / "cli.py",
+        legacy_insider_root() / "cli.py",
         ["parse"],
         {"DB_PATH": args.insider_legacy_db, "SKIP_CONFIG_VALIDATION": "1"},
     )
@@ -317,7 +318,7 @@ def cmd_insider_ingest(args):
         legacy_args.append("--async")
         legacy_args.extend(["--concurrency", str(args.concurrency)])
     result = run_legacy_cli(
-        repo_root() / "legacy-insider" / "cli.py",
+        legacy_insider_root() / "cli.py",
         legacy_args,
         {"DB_PATH": args.insider_legacy_db, "SKIP_CONFIG_VALIDATION": "1"},
     )
@@ -330,7 +331,7 @@ def cmd_insider_ingest(args):
 def cmd_insider_classify(args):
     _compat_warning("insider classify")
     result = run_legacy_cli(
-        repo_root() / "legacy-insider" / "cli.py",
+        legacy_insider_root() / "cli.py",
         ["classify"],
         {"DB_PATH": args.insider_legacy_db, "SKIP_CONFIG_VALIDATION": "1"},
     )
@@ -348,7 +349,7 @@ def cmd_insider_run_legacy(args):
     if args.max_filings is not None:
         legacy_args.extend(["--max-filings", str(args.max_filings)])
     result = run_legacy_cli(
-        repo_root() / "legacy-insider" / "cli.py",
+        legacy_insider_root() / "cli.py",
         legacy_args,
         {"DB_PATH": args.insider_legacy_db, "SKIP_CONFIG_VALIDATION": "1"},
     )
@@ -561,7 +562,7 @@ def cmd_congress_candidate_discovery(args):
 def cmd_congress_init(args):
     _compat_warning("congress init")
     result = run_legacy_cli(
-        repo_root() / "legacy-congress" / "cppi" / "cli.py",
+        legacy_congress_root() / "cppi" / "cli.py",
         ["init"],
         {"CPPI_DB_PATH": args.congress_legacy_db},
     )
@@ -581,7 +582,7 @@ def cmd_congress_ingest(args):
     if args.bulk:
         legacy_args.append("--bulk")
     result = run_legacy_cli(
-        repo_root() / "legacy-congress" / "cppi" / "cli.py",
+        legacy_congress_root() / "cppi" / "cli.py",
         legacy_args,
         {"CPPI_DB_PATH": args.congress_legacy_db},
     )
@@ -597,7 +598,7 @@ def cmd_congress_parse(args):
     if args.force:
         legacy_args.append("--force")
     result = run_legacy_cli(
-        repo_root() / "legacy-congress" / "cppi" / "cli.py",
+        legacy_congress_root() / "cppi" / "cli.py",
         legacy_args,
         {"CPPI_DB_PATH": args.congress_legacy_db},
     )
@@ -726,8 +727,8 @@ def cmd_doctor(args):
         }
     checks = {
         "repo_root_exists": repo_root().exists(),
-        "legacy_insider_exists": (repo_root() / "legacy-insider").exists(),
-        "legacy_congress_exists": (repo_root() / "legacy-congress").exists(),
+        "legacy_insider_exists": legacy_insider_root().exists(),
+        "legacy_congress_exists": legacy_congress_root().exists(),
         "legacy_insider_db_parent_exists": Path(args.insider_legacy_db).parent.exists(),
         "legacy_congress_db_parent_exists": Path(args.congress_legacy_db).parent.exists(),
         "derived_db_parent_writable": writable,

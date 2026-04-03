@@ -20,6 +20,24 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
+def legacy_project_root(project_name: str) -> Path:
+    root = repo_root()
+    direct = root / project_name
+    archived = root / "archive" / project_name
+    if direct.exists():
+        return direct
+    if archived.exists():
+        return archived
+    return direct
+
+
+def legacy_insider_root() -> Path:
+    return legacy_project_root("legacy-insider")
+
+
+def legacy_congress_root() -> Path:
+    return legacy_project_root("legacy-congress")
+
+
 def ensure_env_for_legacy_insider() -> None:
     os.environ.setdefault("SKIP_CONFIG_VALIDATION", "1")
-

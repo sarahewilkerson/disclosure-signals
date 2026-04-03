@@ -27,6 +27,7 @@ def test_legacy_references_are_quarantined():
         "src/signals/cli.py",
         "src/signals/congress/legacy_bridge.py",
         "src/signals/congress/service.py",
+        "src/signals/core/legacy_loader.py",
         "src/signals/core/legacy_subprocess.py",
         "src/signals/insider/legacy_bridge.py",
         "src/signals/insider/service.py",

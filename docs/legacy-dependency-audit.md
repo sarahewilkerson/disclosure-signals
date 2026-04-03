@@ -12,6 +12,15 @@ The default direct workflow no longer depends on `legacy-insider` or `legacy-con
 
 The remaining legacy dependencies are now explicit and non-default.
 
+## Archive Strategy
+Legacy code is archived under `archive/legacy-insider` and `archive/legacy-congress`.
+
+To keep compatibility non-breaking during the retirement window:
+- `src/signals/core/legacy_loader.py` resolves legacy paths from either the historical root-level location or the archive location
+- root-level `legacy-insider` and `legacy-congress` symlinks remain temporarily as compatibility shims
+
+The shims should be removed only after the compatibility namespace and legacy workflow tests are retired.
+
 ## Remaining Dependencies in `src/signals`
 
 ### Explicit legacy compatibility surfaces
