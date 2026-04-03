@@ -139,6 +139,46 @@ def test_house_quality_metrics_reports_recovery_and_precision(tmp_path):
                 run_id=run.run_id,
             ),
         )
+        insert_normalized(
+            conn,
+            NormalizedTransaction(
+                source="congress",
+                source_record_id="row-4",
+                source_filing_id="filing-4",
+                actor_id="a4",
+                actor_name="Member D",
+                actor_type="member",
+                owner_type="self",
+                entity_key=None,
+                instrument_key=None,
+                ticker=None,
+                issuer_name="Dirty OCR Common Stock",
+                instrument_type=None,
+                transaction_type="purchase",
+                direction="BUY",
+                execution_date="2026-03-01",
+                disclosure_date="2026-03-02",
+                amount_low=1001.0,
+                amount_high=15000.0,
+                amount_estimate=8000.5,
+                currency="USD",
+                units_low=None,
+                units_high=None,
+                price_low=None,
+                price_high=None,
+                quality_score=1.0,
+                parse_confidence=1.0,
+                resolution_event_id="evt-4",
+                resolution_confidence=0.2,
+                resolution_method_version="r",
+                include_in_signal=False,
+                exclusion_reason_code="MISSING_TICKER",
+                exclusion_reason_detail=None,
+                provenance_payload={},
+                normalization_method_version="n",
+                run_id=run.run_id,
+            ),
+        )
         insert_signal_result(
             conn,
             SignalResult(
@@ -169,17 +209,25 @@ def test_house_quality_metrics_reports_recovery_and_precision(tmp_path):
             skip_reasons={"nothing_to_report": 1, "ocr_failed": 1},
         )
 
-    assert payload["normalized_count"] == 3
+    assert payload["normalized_count"] == 4
     assert payload["scored_result_count"] == 1
     assert payload["included_count"] == 1
     assert payload["resolved_entity_count"] == 1
-    assert payload["unresolved_count"] == 2
-    assert payload["scored_signal_rate"] == 0.3333
-    assert payload["resolved_entity_rate"] == 0.3333
-    assert payload["included_rate"] == 0.3333
+    assert payload["unresolved_count"] == 3
+    assert payload["scored_signal_rate"] == 0.25
+    assert payload["resolved_entity_rate"] == 0.25
+    assert payload["included_rate"] == 0.25
     assert payload["skip_reasons"] == {"nothing_to_report": 1, "ocr_failed": 1}
-    assert payload["exclusion_reason_counts"] == {"NON_SIGNAL_ASSET": 2}
+    assert payload["exclusion_reason_counts"] == {"MISSING_TICKER": 1, "NON_SIGNAL_ASSET": 2}
     assert payload["top_unresolved_issuers"] == [
+        {"issuer_name": "Dirty OCR Common Stock", "count": 1},
+        {"issuer_name": "US Treasury Note 4%", "count": 1},
+        {"issuer_name": "pc _ | USD", "count": 1},
+    ]
+    assert payload["top_signal_like_unresolved_issuers"] == [
+        {"issuer_name": "Dirty OCR Common Stock", "count": 1},
+    ]
+    assert payload["top_non_signal_unresolved_issuers"] == [
         {"issuer_name": "US Treasury Note 4%", "count": 1},
         {"issuer_name": "pc _ | USD", "count": 1},
     ]

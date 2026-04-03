@@ -30,6 +30,8 @@ def build_house_quality_metrics(
     resolved_entity_count = 0
     included_count = 0
     unresolved_issuer_counts: dict[str, int] = {}
+    unresolved_signal_like_issuer_counts: dict[str, int] = {}
+    unresolved_non_signal_issuer_counts: dict[str, int] = {}
     recovered_issuer_counts: dict[str, int] = {}
     for row in normalized_rows:
         code = row["exclusion_reason_code"]
@@ -45,6 +47,10 @@ def build_house_quality_metrics(
             unresolved_count += 1
             issuer = row["issuer_name"] or "<unknown>"
             unresolved_issuer_counts[issuer] = unresolved_issuer_counts.get(issuer, 0) + 1
+            if code in {"MISSING_TICKER", "LOW_RESOLUTION_CONFIDENCE"}:
+                unresolved_signal_like_issuer_counts[issuer] = unresolved_signal_like_issuer_counts.get(issuer, 0) + 1
+            elif code == "NON_SIGNAL_ASSET":
+                unresolved_non_signal_issuer_counts[issuer] = unresolved_non_signal_issuer_counts.get(issuer, 0) + 1
 
     normalized_count = len(normalized_rows)
     scored_signal_rate = (scored_count / normalized_count) if normalized_count else 0.0
@@ -54,6 +60,14 @@ def build_house_quality_metrics(
     top_unresolved_issuers = [
         {"issuer_name": issuer, "count": count}
         for issuer, count in sorted(unresolved_issuer_counts.items(), key=lambda item: (-item[1], item[0]))[:10]
+    ]
+    top_signal_like_unresolved_issuers = [
+        {"issuer_name": issuer, "count": count}
+        for issuer, count in sorted(unresolved_signal_like_issuer_counts.items(), key=lambda item: (-item[1], item[0]))[:10]
+    ]
+    top_non_signal_unresolved_issuers = [
+        {"issuer_name": issuer, "count": count}
+        for issuer, count in sorted(unresolved_non_signal_issuer_counts.items(), key=lambda item: (-item[1], item[0]))[:10]
     ]
     top_recovered_issuers = [
         {"issuer_name": issuer, "count": count}
@@ -94,6 +108,8 @@ def build_house_quality_metrics(
         "skip_reasons": dict(sorted(skip_reasons.items())),
         "exclusion_reason_counts": dict(sorted(exclusion_counts.items())),
         "top_unresolved_issuers": top_unresolved_issuers,
+        "top_signal_like_unresolved_issuers": top_signal_like_unresolved_issuers,
+        "top_non_signal_unresolved_issuers": top_non_signal_unresolved_issuers,
         "top_recovered_issuers": top_recovered_issuers,
         "top_scored_subjects": top_scored_subjects,
     }
