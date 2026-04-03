@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from signals.congress.diagnostics import build_house_quality_metrics
+from signals.congress.diagnostics import build_house_candidate_discovery, build_house_quality_metrics
 from signals.core.derived_db import get_connection, init_db, insert_normalized, insert_run, insert_signal_result
 from signals.core.dto import NormalizedTransaction, SignalResult
 from signals.core.runs import make_run
@@ -245,4 +245,84 @@ def test_house_quality_metrics_reports_recovery_and_precision(tmp_path):
             "confidence": 0.5,
             "input_count": 1,
         }
+    ]
+
+
+def test_house_candidate_discovery_groups_signal_like_unresolved_names(tmp_path):
+    db_path = tmp_path / "derived.db"
+    init_db(str(db_path))
+    run = make_run(
+        "direct_house_score",
+        "congress",
+        "test-sha",
+        {},
+        {"normalization": "n", "resolution": "r", "score": "s"},
+    )
+
+    with get_connection(str(db_path)) as conn:
+        insert_run(conn, run)
+        for idx, issuer_name in enumerate(
+            ["Walmart Inc CMN", "Walmart Inc Common Stock", "Dirty OCR Common Stock"],
+            start=1,
+        ):
+            insert_normalized(
+                conn,
+                NormalizedTransaction(
+                    source="congress",
+                    source_record_id=f"row-{idx}",
+                    source_filing_id=f"filing-{idx}",
+                    actor_id=f"a{idx}",
+                    actor_name="Member",
+                    actor_type="member",
+                    owner_type="self",
+                    entity_key=None,
+                    instrument_key=None,
+                    ticker=None,
+                    issuer_name=issuer_name,
+                    instrument_type=None,
+                    transaction_type="purchase",
+                    direction="BUY",
+                    execution_date="2026-03-01",
+                    disclosure_date="2026-03-02",
+                    amount_low=1001.0,
+                    amount_high=15000.0,
+                    amount_estimate=8000.5,
+                    currency="USD",
+                    units_low=None,
+                    units_high=None,
+                    price_low=None,
+                    price_high=None,
+                    quality_score=1.0,
+                    parse_confidence=1.0,
+                    resolution_event_id=f"evt-{idx}",
+                    resolution_confidence=0.2,
+                    resolution_method_version="r",
+                    include_in_signal=False,
+                    exclusion_reason_code="MISSING_TICKER",
+                    exclusion_reason_detail=None,
+                    provenance_payload={"asset_resolution": {"category": "common_stock"}},
+                    normalization_method_version="n",
+                    run_id=run.run_id,
+                ),
+            )
+
+        payload = build_house_candidate_discovery(conn, run_id=run.run_id, limit=10)
+
+    assert payload["run_id"] == run.run_id
+    assert payload["candidate_count"] == 2
+    assert payload["candidates"] == [
+        {
+            "normalized_name": "walmart inc",
+            "count": 2,
+            "asset_categories": {"common_stock": 2},
+            "raw_examples": ["Walmart Inc CMN", "Walmart Inc Common Stock"],
+            "reason_codes": {"MISSING_TICKER": 2},
+        },
+        {
+            "normalized_name": "dirty ocr",
+            "count": 1,
+            "asset_categories": {"common_stock": 1},
+            "raw_examples": ["Dirty OCR Common Stock"],
+            "reason_codes": {"MISSING_TICKER": 1},
+        },
     ]

@@ -10,7 +10,7 @@ from signals.core.dto import CombineEligibilityDecision, EntityResolutionEvent, 
 from signals.core.enums import OverlayOutcome, ReasonCode, ResolutionStatus
 from signals.core.versioning import RESOLUTION_METHOD_VERSION
 
-def _normalize_name(name: str | None) -> str | None:
+def normalize_entity_name(name: str | None) -> str | None:
     if not name:
         return None
     normalized = name.lower()
@@ -52,7 +52,7 @@ def _canonical_indexes() -> tuple[dict[str, dict], dict[str, dict], dict[str, li
                 by_cik[row["cik"]] = record
             aliases = [row["issuer_name"], *(row.get("name_aliases", "").split("|"))]
             for alias in aliases:
-                normalized = _normalize_name(alias)
+                normalized = normalize_entity_name(alias)
                 if normalized:
                     existing = by_name.setdefault(normalized, [])
                     if not any(item["entity_key"] == record["entity_key"] for item in existing):
@@ -95,7 +95,7 @@ def resolve_entity(
         status = ResolutionStatus.RESOLVED.value
         evidence["match_type"] = "cik"
     else:
-        normalized_name = _normalize_name(issuer_name)
+        normalized_name = normalize_entity_name(issuer_name)
         matches = name_aliases.get(normalized_name or "", [])
         if len(matches) == 1:
             candidate = matches[0]

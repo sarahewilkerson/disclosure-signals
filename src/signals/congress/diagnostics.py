@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import sqlite3
 
+from signals.core.resolution import normalize_entity_name
+
 
 def build_house_quality_metrics(
     conn: sqlite3.Connection,
@@ -130,4 +132,68 @@ def build_house_quality_metrics(
         "top_non_signal_unresolved_issuers": top_non_signal_unresolved_issuers,
         "top_recovered_issuers": top_recovered_issuers,
         "top_scored_subjects": top_scored_subjects,
+    }
+
+
+def build_house_candidate_discovery(
+    conn: sqlite3.Connection,
+    *,
+    run_id: str,
+    limit: int = 10,
+) -> dict:
+    rows = conn.execute(
+        """
+        SELECT issuer_name, exclusion_reason_code, provenance_payload
+        FROM normalized_transactions
+        WHERE source = 'congress'
+          AND run_id = ?
+          AND ticker IS NULL
+          AND entity_key IS NULL
+          AND exclusion_reason_code IN ('MISSING_TICKER', 'LOW_RESOLUTION_CONFIDENCE')
+        """,
+        (run_id,),
+    ).fetchall()
+
+    candidates: dict[str, dict] = {}
+    for row in rows:
+        issuer_name = row["issuer_name"] or "<unknown>"
+        normalized_name = normalize_entity_name(issuer_name)
+        if not normalized_name:
+            continue
+        category = "<unknown>"
+        if isinstance(row["provenance_payload"], str):
+            try:
+                payload = json.loads(row["provenance_payload"])
+                category = payload.get("asset_resolution", {}).get("category") or "<unknown>"
+            except Exception:
+                category = "<unknown>"
+        entry = candidates.setdefault(
+            normalized_name,
+            {
+                "normalized_name": normalized_name,
+                "count": 0,
+                "asset_categories": {},
+                "raw_examples": [],
+                "reason_codes": {},
+            },
+        )
+        entry["count"] += 1
+        entry["asset_categories"][category] = entry["asset_categories"].get(category, 0) + 1
+        code = row["exclusion_reason_code"]
+        entry["reason_codes"][code] = entry["reason_codes"].get(code, 0) + 1
+        if issuer_name not in entry["raw_examples"] and len(entry["raw_examples"]) < 3:
+            entry["raw_examples"].append(issuer_name)
+
+    ordered = sorted(candidates.values(), key=lambda item: (-item["count"], item["normalized_name"]))[:limit]
+    return {
+        "run_id": run_id,
+        "candidate_count": len(ordered),
+        "candidates": [
+            {
+                **item,
+                "asset_categories": dict(sorted(item["asset_categories"].items())),
+                "reason_codes": dict(sorted(item["reason_codes"].items())),
+            }
+            for item in ordered
+        ],
     }

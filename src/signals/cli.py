@@ -16,6 +16,7 @@ from signals.congress.senate_direct import (
     ingest_senate_ptrs_direct,
     run_direct_senate_html_into_derived,
 )
+from signals.congress.diagnostics import build_house_candidate_discovery
 from signals.core.derived_db import fetch_failed_runs, get_connection, init_db
 from signals.core.legacy_subprocess import run_legacy_cli
 from signals.core.pipeline import run_unified_pipeline
@@ -480,6 +481,35 @@ def cmd_congress_status(args):
     ))
 
 
+def cmd_congress_candidate_discovery(args):
+    init_db(args.db)
+    with get_connection(args.db) as conn:
+        run_id = args.run_id
+        if not run_id:
+            row = conn.execute(
+                """
+                SELECT run_id
+                FROM runs
+                WHERE run_type = 'direct_house_score'
+                ORDER BY started_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+            if row is None:
+                raise SystemExit("no direct_house_score runs found in derived DB")
+            run_id = row["run_id"]
+        payload = build_house_candidate_discovery(conn, run_id=run_id, limit=args.limit)
+    if args.format == "json":
+        print(json.dumps(payload, indent=2))
+    else:
+        print(f"house candidate discovery run_id={payload['run_id']}")
+        for item in payload["candidates"]:
+            print(
+                f"- {item['normalized_name']} count={item['count']} "
+                f"categories={item['asset_categories']} examples={item['raw_examples']}"
+            )
+
+
 def cmd_congress_init(args):
     result = run_legacy_cli(
         repo_root() / "legacy-congress" / "cppi" / "cli.py",
@@ -817,6 +847,10 @@ def build_parser() -> argparse.ArgumentParser:
     congress_rewrite_run_senate.set_defaults(func=cmd_congress_rewrite_run_senate)
     congress_report = congress_sub.add_parser("report", help="Render persisted congress results without recomputing")
     congress_report.set_defaults(func=cmd_source_report, source_name="congress")
+    congress_candidates = congress_sub.add_parser("candidate-discovery", help="Show top unresolved House issuer candidates worth adding to the canonical map")
+    congress_candidates.add_argument("--run-id")
+    congress_candidates.add_argument("--limit", type=int, default=10)
+    congress_candidates.set_defaults(func=cmd_congress_candidate_discovery)
     congress_status = congress_sub.add_parser("status", help="Show congress legacy + derived status")
     congress_status.set_defaults(func=cmd_congress_status)
 

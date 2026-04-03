@@ -95,6 +95,14 @@ def test_run_direct_pipeline_composes_direct_flows(tmp_path, monkeypatch):
             "skip_reasons": skip_reasons,
         },
     )
+    monkeypatch.setattr(
+        "signals.core.pipeline.build_house_candidate_discovery",
+        lambda conn, run_id: {
+            "run_id": run_id,
+            "candidate_count": 1,
+            "candidates": [{"normalized_name": "dirty ocr common stock", "count": 1, "asset_categories": {"common_stock": 1}, "raw_examples": ["Dirty OCR Common Stock"], "reason_codes": {"MISSING_TICKER": 1}}],
+        },
+    )
 
     class _ConnCtx:
         def __enter__(self):
@@ -145,6 +153,7 @@ def test_run_direct_pipeline_composes_direct_flows(tmp_path, monkeypatch):
     assert result.congress["imported_result_count"] == 12
     assert result.combined["combined_count"] == 1
     assert result.congress["house_quality_metrics"]["run_id"] == "house-run"
+    assert result.congress["house_candidate_discovery"]["candidate_count"] == 1
 
 
 def test_run_direct_pipeline_writes_house_quality_artifact(tmp_path, monkeypatch):
@@ -198,6 +207,14 @@ def test_run_direct_pipeline_writes_house_quality_artifact(tmp_path, monkeypatch
             "top_scored_subjects": [{"subject_key": "entity:wmt", "label": "bullish", "score": 1.0, "confidence": 0.5, "input_count": 2}],
         },
     )
+    monkeypatch.setattr(
+        "signals.core.pipeline.build_house_candidate_discovery",
+        lambda conn, run_id: {
+            "run_id": run_id,
+            "candidate_count": 1,
+            "candidates": [{"normalized_name": "dirty ocr common stock", "count": 1, "asset_categories": {"common_stock": 1}, "raw_examples": ["Dirty OCR Common Stock"], "reason_codes": {"MISSING_TICKER": 1}}],
+        },
+    )
 
     class _ConnCtx:
         def __enter__(self):
@@ -241,7 +258,18 @@ def test_run_direct_pipeline_writes_house_quality_artifact(tmp_path, monkeypatch
     )
 
     assert result.artifact_paths["house_quality_metrics"].endswith("house_quality_metrics.json")
+    assert result.artifact_paths["house_candidate_discovery"].endswith("house_candidate_discovery.json")
     assert (artifacts / "house_quality_metrics.json").exists()
+    assert (artifacts / "house_candidate_discovery.json").exists()
     assert result.congress["house_quality_metrics"]["top_signal_like_unresolved_issuers"] == [
         {"issuer_name": "Dirty OCR Common Stock", "count": 1}
+    ]
+    assert result.congress["house_candidate_discovery"]["candidates"] == [
+        {
+            "normalized_name": "dirty ocr common stock",
+            "count": 1,
+            "asset_categories": {"common_stock": 1},
+            "raw_examples": ["Dirty OCR Common Stock"],
+            "reason_codes": {"MISSING_TICKER": 1},
+        }
     ]

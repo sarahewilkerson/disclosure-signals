@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from signals.combined.diagnostics import build_overlay_diagnostics
-from signals.congress.diagnostics import build_house_quality_metrics
+from signals.congress.diagnostics import build_house_candidate_discovery, build_house_quality_metrics
 from signals.combined.service import build_from_derived
 from signals.congress.direct_service import run_direct_house_pdfs_into_derived
 from signals.congress.senate_direct import ingest_senate_ptrs_direct, run_direct_senate_html_into_derived
@@ -333,6 +333,7 @@ def run_direct_pipeline(
             skipped_count=getattr(house, "skipped_count", 0),
             skip_reasons=getattr(house, "skip_reasons", {}),
         )
+        house_candidate_discovery = build_house_candidate_discovery(conn, run_id=house.run_id)
         (
             run_summary,
             parity_report,
@@ -361,6 +362,7 @@ def run_direct_pipeline(
                 "senate": senate.to_dict(),
                 "combined": combined.to_dict(),
                 "house_quality_metrics": house_quality_metrics,
+                "house_candidate_discovery": house_candidate_discovery,
             })),
             "parity_report": str(write_json(base / "parity_report.json", parity_report)),
             "exclusion_histogram": str(write_json(base / "exclusion_histogram.json", exclusion_histogram)),
@@ -368,6 +370,7 @@ def run_direct_pipeline(
             "combined_block_report": str(write_json(base / "combined_block_report.json", combined_block_report)),
             "overlay_diagnostics": str(write_json(base / "overlay_diagnostics.json", overlay_diagnostics)),
             "house_quality_metrics": str(write_json(base / "house_quality_metrics.json", house_quality_metrics)),
+            "house_candidate_discovery": str(write_json(base / "house_candidate_discovery.json", house_candidate_discovery)),
             "insider_report_json": str(write_json(base / "insider_report.json", insider_payload)),
             "congress_report_json": str(write_json(base / "congress_report.json", congress_payload)),
             "combined_report_json": str(write_json(base / "combined_report.json", combined_payload)),
@@ -385,6 +388,7 @@ def run_direct_pipeline(
             "house_ingest": house_ingest.to_dict(),
             "house_score": house.to_dict(),
             "house_quality_metrics": house_quality_metrics,
+            "house_candidate_discovery": house_candidate_discovery,
             "senate_ingest": senate_ingest.to_dict(),
             "senate_score": senate.to_dict(),
             "imported_result_count": house.imported_result_count + senate.imported_result_count,
