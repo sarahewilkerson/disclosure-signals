@@ -9,6 +9,10 @@ from signals.analysis.production_confidence import (
     build_production_confidence_report,
     render_production_confidence_markdown,
 )
+from signals.analysis.opportunity_report import (
+    build_overlap_opportunity_report,
+    render_overlap_opportunity_markdown,
+)
 from signals.combined.diagnostics import build_overlay_diagnostics
 from signals.congress.diagnostics import build_congress_candidate_discovery, build_house_candidate_discovery, build_house_quality_metrics
 from signals.combined.service import build_from_derived
@@ -342,6 +346,12 @@ def run_direct_pipeline(
         )
         house_candidate_discovery = build_house_candidate_discovery(conn, run_id=house.run_id)
         senate_candidate_discovery = build_congress_candidate_discovery(conn, run_id=senate.run_id)
+        overlap_opportunity_report = build_overlap_opportunity_report(
+            _typed_signal_results(insider_payload["source_results"]),
+            _typed_signal_results(congress_payload["source_results"]),
+            combined_payload["combined_results"],
+            combined.blocked_rows,
+        )
         (
             run_summary,
             parity_report,
@@ -372,6 +382,7 @@ def run_direct_pipeline(
             "senate_candidate_discovery": senate_candidate_discovery,
             "imported_result_count": house.imported_result_count + senate.imported_result_count,
             "imported_normalized_count": house.imported_normalized_count + senate.imported_normalized_count,
+            "overlap_opportunity_report": overlap_opportunity_report,
         },
         "combined": combined.to_dict(),
         "reports": {
@@ -403,6 +414,7 @@ def run_direct_pipeline(
                 "house_quality_metrics": house_quality_metrics,
                 "house_candidate_discovery": house_candidate_discovery,
                 "senate_candidate_discovery": senate_candidate_discovery,
+                "overlap_opportunity_report": overlap_opportunity_report,
                 "production_confidence": production_confidence,
             })),
             "parity_report": str(write_json(base / "parity_report.json", parity_report)),
@@ -414,6 +426,8 @@ def run_direct_pipeline(
             "house_quality_metrics": str(write_json(base / "house_quality_metrics.json", house_quality_metrics)),
             "house_candidate_discovery": str(write_json(base / "house_candidate_discovery.json", house_candidate_discovery)),
             "senate_candidate_discovery": str(write_json(base / "senate_candidate_discovery.json", senate_candidate_discovery)),
+            "overlap_opportunity_report": str(write_json(base / "overlap_opportunity_report.json", overlap_opportunity_report)),
+            "overlap_opportunity_markdown": str(write_text(base / "overlap_opportunity_report.md", render_overlap_opportunity_markdown(overlap_opportunity_report))),
             "production_confidence_report": str(write_json(base / "production_confidence_report.json", production_confidence)),
             "production_confidence_markdown": str(write_text(base / "production_confidence_report.md", render_production_confidence_markdown(production_confidence))),
             "insider_report_json": str(write_json(base / "insider_report.json", insider_payload)),
