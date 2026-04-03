@@ -1,0 +1,11 @@
+ticker,company_name,sector
+AAPL,Apple Inc.,Information Technology
+MSFT,Microsoft Corporation,Information Technology
+AMZN,Amazon.com Inc.,Consumer Discretionary
+UNH,UnitedHealth Group Inc.,Health Care
+BRK-B,Berkshire Hathaway Inc.,Financials
+JPM,JPMorgan Chase & Co.,Financials
+XOM,Exxon Mobil Corporation,Energy
+CVS,CVS Health Corporation,Health Care
+GOOGL,Alphabet Inc.,Communication Services
+WMT,Walmart Inc.,Consumer Staples

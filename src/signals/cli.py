@@ -687,6 +687,51 @@ def cmd_run_direct(args):
     cmd_run(args)
 
 
+def cmd_validate_live(args):
+    reference_date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else datetime.now()
+    if not args.csv or not args.sec_user_agent:
+        raise SystemExit("validate-live requires --csv and --sec-user-agent")
+    result = run_direct_pipeline(
+        repo_root=repo_root(),
+        derived_db_path=args.db,
+        insider_csv_path=args.csv,
+        insider_user_agent=args.sec_user_agent,
+        insider_cache_dir=args.insider_cache_dir,
+        congress_cache_dir=args.congress_cache_dir,
+        reference_date=reference_date,
+        lookback_window=args.window,
+        insider_max_filings=args.insider_max_filings,
+        house_days=args.house_days,
+        house_max_filings=args.house_max_filings,
+        senate_days=args.senate_days,
+        senate_max_filings=args.senate_max_filings,
+        artifact_dir=Path(args.artifacts_dir) if args.artifacts_dir else None,
+    )
+    payload = {
+        "analysis": result.analysis,
+        "artifact_paths": result.artifact_paths,
+        "run": result.to_dict(),
+    }
+    if args.format == "json":
+        print(json.dumps(payload, indent=2))
+    else:
+        analysis = result.analysis or {}
+        summary = analysis.get("summary", {})
+        assessment = analysis.get("assessment", {})
+        print(
+            f"validate-live overlap={summary.get('overlap_subject_count', 0)} "
+            f"combined={summary.get('combined_count', 0)} "
+            f"blocked={summary.get('blocked_count', 0)} "
+            f"readiness={assessment.get('readiness', 'unknown')}"
+        )
+        if result.artifact_paths:
+            print("")
+            print("Artifacts:")
+            for key, value in sorted(result.artifact_paths.items()):
+                if key.startswith("production_confidence") or key in {"overlay_diagnostics", "run_summary"}:
+                    print(f"- {key}: {value}")
+
+
 def cmd_status(args):
     result = derived_status(args.db)
     if args.format == "json":
@@ -782,6 +827,20 @@ def build_parser() -> argparse.ArgumentParser:
     run_direct.add_argument("--window", type=int, default=90, help="Lookback window in days")
     run_direct.set_defaults(legacy=False)
     run_direct.set_defaults(func=cmd_run_direct)
+
+    validate_live = subparsers.add_parser("validate-live", help="Run a larger direct live-universe validation and emit a production-confidence report")
+    validate_live.add_argument("--csv", required=True, help="Path to company universe CSV for direct insider ingest")
+    validate_live.add_argument("--sec-user-agent", required=True, help="SEC-compliant user agent for direct insider ingest")
+    validate_live.add_argument("--insider-cache-dir", default=str(default_insider_rewrite_cache()), help="Rewrite cache directory for insider SEC XML")
+    validate_live.add_argument("--congress-cache-dir", default=str(default_congress_rewrite_cache()), help="Rewrite cache root for House PDFs, FD XML, and Senate HTML")
+    validate_live.add_argument("--insider-max-filings", type=int, default=None, help="Maximum insider filings per company")
+    validate_live.add_argument("--house-days", type=int, default=90, help="House ingest lookback days")
+    validate_live.add_argument("--house-max-filings", type=int, default=None, help="Maximum House filings to fetch and score")
+    validate_live.add_argument("--senate-days", type=int, default=365, help="Senate ingest lookback days")
+    validate_live.add_argument("--senate-max-filings", type=int, default=None, help="Maximum Senate filings to fetch and score")
+    validate_live.add_argument("--date", default=None, help="Reference date YYYY-MM-DD")
+    validate_live.add_argument("--window", type=int, default=90, help="Lookback window in days")
+    validate_live.set_defaults(func=cmd_validate_live)
 
     slice_parser = subparsers.add_parser("slice", help="Run the narrow vertical slice")
     slice_sub = slice_parser.add_subparsers(dest="slice_command")

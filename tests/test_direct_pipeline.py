@@ -111,6 +111,14 @@ def test_run_direct_pipeline_composes_direct_flows(tmp_path, monkeypatch):
             "candidates": [{"normalized_name": "dirty ocr common stock", "count": 1, "asset_categories": {"common_stock": 1}, "raw_examples": ["Dirty OCR Common Stock"], "reason_codes": {"MISSING_TICKER": 1}}],
         },
     )
+    monkeypatch.setattr(
+        "signals.core.pipeline.build_congress_candidate_discovery",
+        lambda conn, run_id: {
+            "run_id": run_id,
+            "candidate_count": 0 if run_id == "senate-run" else 1,
+            "candidates": [] if run_id == "senate-run" else [{"normalized_name": "dirty ocr common stock", "count": 1, "asset_categories": {"common_stock": 1}, "raw_examples": ["Dirty OCR Common Stock"], "reason_codes": {"MISSING_TICKER": 1}}],
+        },
+    )
 
     class _ConnCtx:
         def __enter__(self):
@@ -163,6 +171,8 @@ def test_run_direct_pipeline_composes_direct_flows(tmp_path, monkeypatch):
     assert result.combined["combined_count"] == 1
     assert result.congress["house_quality_metrics"]["run_id"] == "house-run"
     assert result.congress["house_candidate_discovery"]["candidate_count"] == 1
+    assert result.congress["senate_candidate_discovery"]["candidate_count"] == 0
+    assert result.analysis["assessment"]["primary_constraint"] == "low_house_signal_extraction_rate"
 
 
 def test_run_direct_pipeline_writes_house_quality_artifact(tmp_path, monkeypatch):
@@ -232,6 +242,14 @@ def test_run_direct_pipeline_writes_house_quality_artifact(tmp_path, monkeypatch
             "candidates": [{"normalized_name": "dirty ocr common stock", "count": 1, "asset_categories": {"common_stock": 1}, "raw_examples": ["Dirty OCR Common Stock"], "reason_codes": {"MISSING_TICKER": 1}}],
         },
     )
+    monkeypatch.setattr(
+        "signals.core.pipeline.build_congress_candidate_discovery",
+        lambda conn, run_id: {
+            "run_id": run_id,
+            "candidate_count": 0,
+            "candidates": [],
+        },
+    )
 
     class _ConnCtx:
         def __enter__(self):
@@ -277,9 +295,15 @@ def test_run_direct_pipeline_writes_house_quality_artifact(tmp_path, monkeypatch
     assert result.artifact_paths["house_quality_metrics"].endswith("house_quality_metrics.json")
     assert result.artifact_paths["insider_candidate_discovery"].endswith("insider_candidate_discovery.json")
     assert result.artifact_paths["house_candidate_discovery"].endswith("house_candidate_discovery.json")
+    assert result.artifact_paths["senate_candidate_discovery"].endswith("senate_candidate_discovery.json")
+    assert result.artifact_paths["production_confidence_report"].endswith("production_confidence_report.json")
+    assert result.artifact_paths["production_confidence_markdown"].endswith("production_confidence_report.md")
     assert (artifacts / "insider_candidate_discovery.json").exists()
     assert (artifacts / "house_quality_metrics.json").exists()
     assert (artifacts / "house_candidate_discovery.json").exists()
+    assert (artifacts / "senate_candidate_discovery.json").exists()
+    assert (artifacts / "production_confidence_report.json").exists()
+    assert (artifacts / "production_confidence_report.md").exists()
     assert result.congress["house_quality_metrics"]["top_signal_like_unresolved_issuers"] == [
         {"issuer_name": "Dirty OCR Common Stock", "count": 1}
     ]
