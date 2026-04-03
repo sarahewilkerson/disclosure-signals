@@ -52,7 +52,7 @@ def default_insider_legacy_db() -> Path:
 
 
 def default_insider_xml_cache() -> Path:
-    return repo_root() / "legacy-insider" / "cache" / "filings"
+    return default_insider_rewrite_cache() / "filings"
 
 
 def default_insider_rewrite_cache() -> Path:
@@ -846,7 +846,7 @@ def build_parser() -> argparse.ArgumentParser:
     congress_rewrite_ingest_house.add_argument("--force", action="store_true", help="Force re-download of cached PDFs")
     congress_rewrite_ingest_house.set_defaults(func=cmd_congress_rewrite_ingest_house)
     congress_rewrite_house = congress_sub.add_parser("rewrite-score-house", help="Run direct congress House PDF parsing/scoring from cached text PDFs without the legacy congress DB")
-    congress_rewrite_house.add_argument("--pdf-dir", default=str(repo_root() / "legacy-congress" / "cache" / "pdfs" / "house"), help="Directory containing cached House PTR PDFs")
+    congress_rewrite_house.add_argument("--pdf-dir", default=str(default_congress_rewrite_cache() / "pdfs" / "house"), help="Directory containing cached House PTR PDFs")
     congress_rewrite_house.add_argument("--date", default=None, help="Reference date YYYY-MM-DD")
     congress_rewrite_house.add_argument("--window", type=int, default=90, help="Lookback window in days")
     congress_rewrite_house.add_argument("--max-files", type=int, default=None, help="Maximum PDFs to process")
