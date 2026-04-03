@@ -44,9 +44,11 @@ SECTOR_ETFS = {
 }
 SINGLE_STOCK_ETFS = {"TSLL", "TSLQ", "NVDL", "NVDS", "AAPD", "AAPU", "MSFO", "MSFD", "AMZD", "AMZU", "GOOGL", "GOOLD", "METD", "METU"}
 TREASURY_PATTERNS = [r"treasury", r"t-?bill", r"t-?bond", r"t-?note", r"us\s+gov", r"u\.s\.\s+gov", r"united\s+states.*(?:bond|note|bill)"]
-MUNI_PATTERNS = [r"\bgo\b.*(?:call|bond|bds)", r"municipal", r"\bst\b.*(?:sales|tax|rev)", r"city\s+(?:&|and)", r"county\s+(?:&|and)", r"rev(?:enue)?\s+(?:bond|jr)", r"utx\s+due", r"\bn\s*y\b.*\bgo\b", r"\bgo\s+bds\b"]
-PRIVATE_PATTERNS = [r",\s*llc\b", r",\s*lp\b", r",\s*inc\.\s*$", r"promissory\s+note", r"private\s+equity", r"venture\s+fund", r"capital\s+fund"]
-MUTUAL_FUND_PATTERNS = [r"\bfund\b(?!.*etf)", r"portfolio", r"retirement", r"401k", r"ira\s+", r"target\s+date", r"money\s+market"]
+MUNI_PATTERNS = [r"\bgo\b.*(?:call|bond|bds)", r"municipal", r"\bst\b.*(?:sales|tax|rev)", r"city\s+(?:&|and)", r"county\s+(?:&|and)", r"rev(?:enue)?\s+(?:bond|jr)", r"utx\s+due", r"\bn\s*y\b.*\bgo\b", r"\bgo\s+bds\b", r"\bsch\s+dist\b", r"\barpt\b", r"\bwtr\b", r"\bcnty\b", r"\bohio\b.*\bgo\b", r"\bpa\b.*\brev\b"]
+PRIVATE_PATTERNS = [r",\s*llc\b", r",\s*lp\b", r"promissory\s+note", r"private\s+equity", r"venture\s+fund", r"capital\s+fund", r"partners?\s+llc", r"allocate\s+\d{4}\s+lp"]
+MUTUAL_FUND_PATTERNS = [r"\bfund\b(?!.*etf)", r"portfolio", r"retirement", r"401k", r"ira\s+", r"target\s+date", r"money\s+market", r"admiral\s+shares", r"\binstl\b", r"\binst!\b", r"harding\s+loevner", r"dimensional", r"\bdfa\b", r"core\s+equity"]
+ETF_NAME_PATTERNS = [r"\betf\b", r"spdr", r"invesco\s+qqq", r"dow\s+jones", r"trust\s+nysearca", r"total\s+stock\s+market"]
+CORPORATE_BOND_PATTERNS = [r"structured\s+note", r"linked\s+note", r"hybrid\s+perpetual", r"rate/coupon", r"matures:\d", r"\b\d{6}[a-z0-9]{2}\b"]
 CRYPTO_PATTERNS = [r"bitcoin", r"ethereum", r"crypto", r"blockchain", r"digital\s+asset"]
 
 
@@ -56,6 +58,8 @@ class EntityResolver:
         self._muni_re = re.compile("|".join(MUNI_PATTERNS), re.IGNORECASE)
         self._private_re = re.compile("|".join(PRIVATE_PATTERNS), re.IGNORECASE)
         self._mutual_fund_re = re.compile("|".join(MUTUAL_FUND_PATTERNS), re.IGNORECASE)
+        self._etf_name_re = re.compile("|".join(ETF_NAME_PATTERNS), re.IGNORECASE)
+        self._corporate_bond_re = re.compile("|".join(CORPORATE_BOND_PATTERNS), re.IGNORECASE)
         self._crypto_re = re.compile("|".join(CRYPTO_PATTERNS), re.IGNORECASE)
 
     def resolve(self, asset_name: str, ticker: str | None = None, asset_type_code: str | None = None) -> ResolutionResult:
@@ -114,8 +118,16 @@ class EntityResolver:
             return AssetCategory.MUNICIPAL_BOND
         if self._private_re.search(asset_lower):
             return AssetCategory.PRIVATE_PLACEMENT
+        if self._etf_name_re.search(asset_lower):
+            if "admiral shares" in asset_lower:
+                return AssetCategory.MUTUAL_FUND
+            if ticker == "DIA" or "dow jones" in asset_lower or "qqq" in asset_lower or "total stock market" in asset_lower:
+                return AssetCategory.BROAD_INDEX_ETF
+            return AssetCategory.SECTOR_ETF if ticker in SECTOR_ETFS else AssetCategory.BROAD_INDEX_ETF
         if self._mutual_fund_re.search(asset_lower):
             return AssetCategory.MUTUAL_FUND
+        if self._corporate_bond_re.search(asset_lower):
+            return AssetCategory.CORPORATE_BOND
         if self._crypto_re.search(asset_lower):
             return AssetCategory.CRYPTO
         if ticker:
