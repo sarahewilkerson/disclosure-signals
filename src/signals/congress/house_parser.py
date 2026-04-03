@@ -369,6 +369,8 @@ class PaperHouseFilingParser:
         asset_name = re.sub(r"\s*\|+\s*$", "", asset_name)
         asset_name = re.sub(r"^\s*\|+\s*", "", asset_name)
         asset_name = re.sub(r"\s*[PSE]\s*$", "", asset_name)
+        asset_name = re.sub(r"\s+[xX]+\s*$", "", asset_name)
+        asset_name = re.sub(r"\s+[~'\"`.,;:]+\s*$", "", asset_name)
         asset_name = asset_name.strip()
         if not self._looks_like_asset_name(asset_name):
             return None
@@ -379,6 +381,8 @@ class PaperHouseFilingParser:
         elif re.search(r"\bE\b", pre_date):
             txn_type = "exchange"
         elif re.search(r"\bP\b", pre_date):
+            txn_type = "purchase"
+        elif "x" in line.lower():
             txn_type = "purchase"
         else:
             return None
@@ -448,6 +452,9 @@ class PaperHouseFilingParser:
             if col in self.AMOUNT_COLUMNS:
                 lo, hi = self.AMOUNT_COLUMNS[col]
                 return lo, hi, f"Column {col}"
+
+        if "x" in after_dates.lower():
+            return 1_001, 15_000, "$1,001 - $15,000 (inferred)"
 
         return None, None, ""
 

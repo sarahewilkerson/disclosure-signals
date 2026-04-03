@@ -1,0 +1,13 @@
+ticker,cik,entity_key,instrument_key,issuer_name,name_aliases
+AAPL,0000320193,entity:apple,instrument:aapl:common,Apple Inc.,"apple inc|apple inc."
+MSFT,0000789019,entity:microsoft,instrument:msft:common,Microsoft Corporation,"microsoft corporation|microsoft corp"
+AMZN,0001018724,entity:amazon,instrument:amzn:common,Amazon.com Inc.,"amazon.com inc.|amazon com inc|amazon"
+INTU,,entity:intuit,instrument:intu:common,Intuit Inc.,"intuit inc|intuit"
+UBER,,entity:uber,instrument:uber:common,Uber Technologies Inc.,"uber technologies inc|uber"
+MELI,,entity:mercadolibre,instrument:meli:common,MercadoLibre Inc.,"mercadolibre inc|mercadolibre"
+BKNG,,entity:booking,instrument:bkng:common,Booking Holdings Inc.,"booking holdings inc|booking hlogs inc|booking"
+ASML,,entity:asml,instrument:asml:common,ASML Holding N.V.,"asml holding nv ny reg shs|asml holding nv|asml"
+SAP,,entity:sap,instrument:sap:common,SAP SE,"sap se sponsored adr|sap se"
+AER,,entity:aercap,instrument:aer:common,AerCap Holdings N.V.,"aercap holdings nv|aercap"
+MWA,,entity:mueller-water,instrument:mwa:common,Mueller Water Products Inc.,"mueller water products inc|mueller water"
+GOOG,,entity:alphabet,instrument:goog:common,Alphabet Inc.,"alphabet inc cl c|alphabet inc clc|alphabet inc cl.c|alphabet inc"

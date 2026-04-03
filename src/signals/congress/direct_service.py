@@ -23,7 +23,7 @@ from signals.core.derived_db import (
     update_run_status,
 )
 from signals.core.dto import NormalizedTransaction, SignalResult
-from signals.core.enums import ReasonCode
+from signals.core.enums import ReasonCode, ResolutionStatus
 from signals.core.git import git_sha
 from signals.core.resolution import resolve_entity
 from signals.core.runs import make_run, utcnow_iso
@@ -131,7 +131,19 @@ def run_direct_house_pdfs_into_derived(
                 run_id=run.run_id,
             )
             resolution_events[source_record_id] = resolution_event
-            include = bool(txn.ticker) and txn.transaction_type in {"purchase", "sale", "sale_partial"}
+            include = (
+                resolution_event.resolution_status == ResolutionStatus.RESOLVED.value
+                and bool(resolution_event.ticker)
+                and txn.transaction_type in {"purchase", "sale", "sale_partial"}
+            )
+            if include:
+                exclusion_reason_code = None
+            elif not txn.ticker:
+                exclusion_reason_code = ReasonCode.MISSING_TICKER.value
+            elif resolution_event.resolution_status != ResolutionStatus.RESOLVED.value:
+                exclusion_reason_code = ReasonCode.LOW_RESOLUTION_CONFIDENCE.value
+            else:
+                exclusion_reason_code = ReasonCode.NON_SIGNAL_ASSET.value
             normalized = NormalizedTransaction(
                 source="congress",
                 source_record_id=source_record_id,
@@ -163,7 +175,7 @@ def run_direct_house_pdfs_into_derived(
                 resolution_confidence=resolution_event.resolution_confidence,
                 resolution_method_version=RESOLUTION_METHOD_VERSION,
                 include_in_signal=include,
-                exclusion_reason_code=None if include else (ReasonCode.MISSING_TICKER.value if not txn.ticker else ReasonCode.NON_SIGNAL_ASSET.value),
+                exclusion_reason_code=exclusion_reason_code,
                 exclusion_reason_detail=skip_reason,
                 provenance_payload={
                     "source_system": "direct-congress-house-pdf",

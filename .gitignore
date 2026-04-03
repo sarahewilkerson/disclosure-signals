@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 src/*.egg-info/
 data/
+!src/signals/core/data/
+!src/signals/core/data/canonical_entities.csv
