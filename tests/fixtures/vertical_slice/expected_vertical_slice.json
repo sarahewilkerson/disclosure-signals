@@ -3,15 +3,15 @@
   "source_scores": {
     "insider:entity:aapl": {
       "label": "bullish",
-      "score": 1.0
+      "score": 0.7616
     },
     "congress:entity:aapl": {
       "label": "bullish",
-      "score": 2324.9516123997073
+      "score": 3836.1701604595173
     },
     "congress:entity:msft": {
       "label": "bearish",
-      "score": -13145.779550867268
+      "score": -21690.53625893099
     }
   },
   "combined_summary": {

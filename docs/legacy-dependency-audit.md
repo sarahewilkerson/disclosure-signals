@@ -30,9 +30,7 @@ The remaining legacy dependencies are now explicit and non-default.
 - `src/signals/insider/legacy_bridge.py`
 - `src/signals/congress/legacy_bridge.py`
 
-### Legacy-backed slice/test helpers
-- `src/signals/insider/slice.py`
-- `src/signals/congress/slice.py`
+### Legacy-backed test/reference surfaces
 - `tests/test_unified_legacy_workflows.py`
 
 ### Repo-native parity and fixture replacements completed
@@ -63,12 +61,11 @@ Legacy folders should not be archived or deleted until all of the following are 
    - optional compatibility shims slated for removal.
 
 ## Recommended Removal Order
-1. Remove legacy-backed slice helpers.
-2. Remove `src/signals/*/service.py` legacy import paths once no longer needed.
-3. Remove deprecated top-level compatibility shims and keep only `compat ...` temporarily.
-4. Remove `compat ...` commands when no longer needed.
-5. Archive `legacy-insider` and `legacy-congress`.
-6. Delete archived legacy code only after one stable cycle with no dependency regressions.
+1. Remove `src/signals/*/service.py` legacy import paths once no longer needed.
+2. Remove deprecated top-level compatibility shims and keep only `compat ...` temporarily.
+3. Remove `compat ...` commands when no longer needed.
+4. Archive `legacy-insider` and `legacy-congress`.
+5. Delete archived legacy code only after one stable cycle with no dependency regressions.
 
 ## Current Assessment
 The system is operationally direct by default, but not yet purge-ready. The remaining legacy code is now mostly:
