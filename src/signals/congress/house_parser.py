@@ -56,6 +56,16 @@ AMOUNT_PATTERN = re.compile(r"(\$[\d,]+\s*-\s*\$[\d,]+|Over \$[\d,]+)")
 EXACT_AMOUNT_PATTERN = re.compile(r"\$(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*$")
 AMOUNT_LOWER_PATTERN = re.compile(r"\$(\d{1,3}(?:,\d{3})*)\s*-\s*$")
 PAPER_OWNER_PATTERN = re.compile(r"^(JT|SP|DC|st)\s*\|?\s*", re.I)
+PAPER_AMENDMENT_PATTERN = re.compile(
+    r"^(?P<asset>.+?)\s+\$(?P<amount_low>\d[\d,\]\|Iil]*)\s*[-–]\s*\$(?P<amount_high>\d[\d,\]\|Iil,]*)\s+"
+    r"(?P<action>Sale|Purchase)\s+(?P<date>\d{1,2}/\d{1,2}/\d{4})\s+(?P<owner>Spouse|Self)\b",
+    re.I,
+)
+PAPER_AMENDMENT_SPLIT_AMOUNT_PATTERN = re.compile(
+    r"^(?P<asset>.+?)\s+\$(?P<amount_low>\d[\d,\]\|Iil]*)\s*[-–]\s*(?P<action>Sale|Purchase)\s+"
+    r"(?P<date>\d{1,2}/\d{1,2}/\d{4})\s+(?P<owner>Spouse|Self)\b.*?\$(?P<amount_high>\d[\d,\]\|Iil,]*)",
+    re.I,
+)
 
 
 def pdf_has_extractable_text(pdf_path: Path) -> bool:
@@ -337,6 +347,9 @@ class PaperHouseFilingParser:
             ]):
                 continue
             txn = self._parse_paper_transaction_line(line, i + 1)
+            if txn is None and re.search(r"\b(Sale|Purchase)\b", line, re.I) and re.search(r"\d{1,2}/\d{1,2}/\d{4}", line):
+                merged = " ".join(part.strip() for part in lines[i:i + 3] if part.strip())
+                txn = self._parse_paper_transaction_line(merged, i + 1)
             if txn:
                 transactions.append(txn)
         return transactions
@@ -345,6 +358,9 @@ class PaperHouseFilingParser:
         del line_num
         line = line.replace("|", " | ")
         line = re.sub(r"\s+", " ", line)
+        amendment_txn = self._parse_paper_amendment_line(line)
+        if amendment_txn is not None:
+            return amendment_txn
         dates = re.findall(r"(\d{1,2}/\d{1,2}/\d{2,4})", line)
         if not dates:
             return None
@@ -381,6 +397,10 @@ class PaperHouseFilingParser:
         elif re.search(r"\bE\b", pre_date):
             txn_type = "exchange"
         elif re.search(r"\bP\b", pre_date):
+            txn_type = "purchase"
+        elif re.search(r"\bsale\b", pre_date, re.I):
+            txn_type = "sale"
+        elif re.search(r"\bpurchase\b", pre_date, re.I):
             txn_type = "purchase"
         elif "x" in line.lower():
             txn_type = "purchase"
@@ -458,6 +478,59 @@ class PaperHouseFilingParser:
 
         return None, None, ""
 
+    def _parse_paper_amendment_line(self, line: str) -> ParsedTransaction | None:
+        match = PAPER_AMENDMENT_PATTERN.search(line)
+        if not match:
+            match = PAPER_AMENDMENT_SPLIT_AMOUNT_PATTERN.search(line)
+        if not match:
+            return None
+
+        asset_name = match.group("asset").strip()
+        asset_name = re.sub(r"\s+[~'\"`.,;:]+\s*$", "", asset_name).strip()
+        if not self._looks_like_asset_name(asset_name):
+            return None
+
+        action = match.group("action").lower()
+        txn_type = "sale" if action == "sale" else "purchase"
+        owner_raw = match.group("owner").lower()
+        owner = "spouse" if owner_raw == "spouse" else "self"
+
+        try:
+            transaction_date = datetime.strptime(match.group("date"), "%m/%d/%Y")
+        except ValueError:
+            return None
+
+        def _clean_amount(raw: str) -> int:
+            normalized = raw.translate(str.maketrans({"I": "1", "i": "1", "l": "1", "|": "1", "]": "1"}))
+            normalized = re.sub(r"[^\d,]", "", normalized)
+            if re.fullmatch(r"1,?0001", normalized):
+                return 1_001
+            return int(normalized.replace(",", ""))
+
+        try:
+            amount_min = _clean_amount(match.group("amount_low"))
+            amount_max = _clean_amount(match.group("amount_high"))
+        except ValueError:
+            return None
+
+        return ParsedTransaction(
+            owner=owner,
+            asset_name=asset_name,
+            ticker=None,
+            asset_type=None,
+            transaction_type=txn_type,
+            transaction_date=transaction_date,
+            notification_date=None,
+            amount_min=amount_min,
+            amount_max=amount_max,
+            amount_text=f"${amount_min:,} - ${amount_max:,}",
+            cap_gains_over_200=None,
+            description=None,
+            subowner=None,
+            page_number=1,
+            raw_line=line,
+        )
+
 
 def validate_ocr_output(text: str) -> bool:
     if not text or len(text) < 50:
@@ -487,6 +560,10 @@ def parse_house_pdf(pdf_path: Path) -> tuple[ParsedFiling | None, str | None]:
     ocr_result = ocr_pdf(pdf_path)
     if not ocr_result.is_successful:
         return None, "ocr_failed"
+    if "nothing to report" in ocr_result.text.lower():
+        paper_parser = PaperHouseFilingParser()
+        paper_filing = paper_parser.parse_ocr_text(ocr_result.text, pdf_path, ocr_result.page_count)
+        return paper_filing, "nothing_to_report"
     if not validate_ocr_output(ocr_result.text):
         return None, "ocr_invalid"
 
