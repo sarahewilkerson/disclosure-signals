@@ -1,0 +1,31 @@
+{
+  "single_score": {
+    "raw_score": 3874.9193539995126,
+    "final_score": 3874.9193539995126
+  },
+  "aggregate": {
+    "volume_net": 193.74596769997564,
+    "unique_members": 1,
+    "transactions_included": 1
+  },
+  "confidence": {
+    "composite_score": 0.5055000000000001,
+    "tier": "MODERATE",
+    "factors": {
+      "member_coverage": 0.02,
+      "transaction_volume": 0.005,
+      "resolution_quality": 1.0,
+      "timeliness": 1.0,
+      "balance": 1.0,
+      "concentration": 0.0
+    },
+    "weights": {
+      "member_coverage": 0.25,
+      "resolution_quality": 0.2,
+      "timeliness": 0.2,
+      "concentration": 0.15,
+      "transaction_volume": 0.1,
+      "balance": 0.1
+    }
+  }
+}

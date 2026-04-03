@@ -1,0 +1,17 @@
+{
+  "member_id": "fixture",
+  "ticker": "AAPL",
+  "transaction_type": "purchase",
+  "execution_date": "2024-04-24T00:00:00",
+  "amount_min": 1001,
+  "amount_max": 15000,
+  "owner_type": "self",
+  "base_value": 3874.9193539995126,
+  "direction": 1.0,
+  "staleness_penalty": 0.2,
+  "owner_weight": 1.0,
+  "resolution_confidence": 1.0,
+  "signal_weight": 1.0,
+  "raw_score": 774.9838707999025,
+  "final_score": 774.9838707999025
+}

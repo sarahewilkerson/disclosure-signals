@@ -1,0 +1,9 @@
+{
+  "direction": 1.0,
+  "role_weight": 1.0,
+  "discretionary_weight": 1.0,
+  "size_signal": 1.0,
+  "ownership_weight": 1.0,
+  "recency_weight": 1.0,
+  "transaction_signal": 1.0
+}

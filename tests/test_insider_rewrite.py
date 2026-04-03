@@ -9,7 +9,7 @@ def test_direct_insider_xml_into_derived(tmp_path):
     repo_root = Path(__file__).resolve().parents[1]
     xml_dir = tmp_path / "xml"
     xml_dir.mkdir()
-    fixture = repo_root / "legacy-insider" / "tests" / "fixtures" / "form4_simple_buy.xml"
+    fixture = repo_root / "tests" / "fixtures" / "insider" / "form4_simple_buy.xml"
     target = xml_dir / fixture.name
     target.write_text(fixture.read_text())
 

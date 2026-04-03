@@ -1,0 +1,23 @@
+{
+  "single_score": {
+    "direction": 1.0,
+    "role_weight": 0.0,
+    "discretionary_weight": 1.0,
+    "size_signal": 1.0,
+    "ownership_weight": 1.0,
+    "recency_weight": 1.0,
+    "transaction_signal": 0.0
+  },
+  "aggregate": {
+    "signal": "neutral",
+    "score": 0.0,
+    "confidence": 0.3477,
+    "confidence_tier": "low",
+    "buy_count": 1,
+    "sell_count": 0,
+    "unique_buyers": 1,
+    "unique_sellers": 0,
+    "explanation": "Signal: NEUTRAL (score=0.000, confidence=0.35/low). Based on 1 buy(s) and 0 sell(s) from 1 buyer(s) and 0 seller(s) over the past 90 days. Largest contributor: insider CIK 0001234567 (bearish, raw signal=0.000).",
+    "window_days": 90
+  }
+}

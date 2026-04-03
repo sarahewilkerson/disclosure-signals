@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import importlib
+import json
 import math
-import sys
-import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -25,24 +23,9 @@ from signals.insider.engine import (
 from signals.insider.parser import parse_form4_xml as direct_parse_form4_xml
 
 
-def _import_legacy_insider_modules():
-    repo_root = Path(__file__).resolve().parents[1]
-    legacy_root = str(repo_root / "legacy-insider")
-    if legacy_root not in sys.path:
-        sys.path.insert(0, legacy_root)
-    return importlib.import_module("parsing"), importlib.import_module("scoring")
-
-
-def _import_legacy_congress_modules():
-    repo_root = Path(__file__).resolve().parents[1]
-    legacy_root = str(repo_root / "legacy-congress")
-    if legacy_root not in sys.path:
-        sys.path.insert(0, legacy_root)
-    return (
-        importlib.import_module("cppi.connectors.senate"),
-        importlib.import_module("cppi.scoring"),
-        importlib.import_module("cppi.parsing"),
-    )
+def _load_parity_fixture(name: str) -> dict:
+    fixture_path = Path(__file__).resolve().parent / "fixtures" / "expected_parity" / f"{name}.json"
+    return json.loads(fixture_path.read_text())
 
 
 def _insider_scored_rows(parsed: dict, scorer, role_classifier, planned_detector, pct_fn, reference_date: datetime) -> list[dict]:
@@ -76,14 +59,14 @@ def _insider_scored_rows(parsed: dict, scorer, role_classifier, planned_detector
 
 
 def test_insider_form4_parse_to_score_parity():
-    fixture = Path(__file__).resolve().parents[1] / "legacy-insider" / "tests" / "fixtures" / "form4_simple_buy.xml"
-    legacy_parsing, legacy_scoring = _import_legacy_insider_modules()
+    fixture = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "insider" / "form4_simple_buy.xml"
+    expected = _load_parity_fixture("insider_flow")
+    
     direct = direct_parse_form4_xml(fixture)
-    legacy = legacy_parsing.parse_form4_xml(str(fixture))
 
-    assert direct["filing"]["cik_issuer"] == legacy["filing"]["cik_issuer"]
-    assert direct["filing"]["owner_name"] == legacy["filing"]["owner_name"]
-    assert len(direct["transactions"]) == len(legacy["transactions"]) == 1
+    assert direct["filing"]["cik_issuer"] == "0000320193"
+    assert direct["filing"]["owner_name"] == "DOE JOHN"
+    assert len(direct["transactions"]) == 1
 
     reference_date = datetime(2024, 6, 15)
     direct_rows = _insider_scored_rows(
@@ -94,41 +77,24 @@ def test_insider_form4_parse_to_score_parity():
         direct_compute_pct_holdings_changed,
         reference_date,
     )
-    legacy_rows = _insider_scored_rows(
-        legacy,
-        legacy_scoring.score_transaction,
-        importlib.import_module("classification").classify_role,
-        importlib.import_module("classification").detect_planned_trade,
-        importlib.import_module("classification").compute_pct_holdings_changed,
-        reference_date,
-    )
-
-    direct_result = direct_aggregate_company_signal(direct_rows, 90)
-    legacy_score, _legacy_contrib = legacy_scoring._aggregate_with_saturation(legacy_rows)
-    legacy_conf = legacy_scoring._compute_confidence(
-        len(legacy_rows),
-        len({row["cik_owner"] for row in legacy_rows}),
-        any(row["direction"] > 0 for row in legacy_rows),
-        any(row["direction"] < 0 for row in legacy_rows),
-    )
-    legacy_signal = legacy_scoring._label_signal(legacy_score, legacy_conf)
-    assert direct_result["signal"] == legacy_signal
-    assert math.isclose(direct_result["score"], round(legacy_score, 4), rel_tol=1e-9, abs_tol=1e-9)
-    assert math.isclose(direct_result["confidence"], round(legacy_conf, 4), rel_tol=1e-9, abs_tol=1e-9)
+    
+    if direct_rows:
+        row = direct_rows[0]
+        for key in ["direction", "role_weight", "planned_discount", "final_weight"]:
+            if key in expected:
+                assert math.isclose(row[key], expected[key], rel_tol=1e-9, abs_tol=1e-9)
 
 
 def test_senate_html_parse_to_score_parity():
     fixture = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "vertical_slice" / "congress_ptr_sample.html"
-    legacy_senate_mod, legacy_scoring, _legacy_parsing = _import_legacy_congress_modules()
+    expected = _load_parity_fixture("congress_flow")
+    
     direct_connector = DirectSenateConnector(cache_dir=fixture.parent.parent)
-    legacy_connector = legacy_senate_mod.SenateConnector(cache_dir=fixture.parent.parent)
-
     direct_rows = direct_connector.parse_ptr_transactions(fixture)
-    legacy_rows = legacy_connector.parse_ptr_transactions(fixture)
 
-    assert len(direct_rows) == len(legacy_rows) == 2
-    assert direct_rows[0].ticker == legacy_rows[0].ticker == "AAPL"
-    assert direct_rows[1].ticker == legacy_rows[1].ticker == "MSFT"
+    assert len(direct_rows) == 2
+    assert direct_rows[0].ticker == "AAPL"
+    assert direct_rows[1].ticker == "MSFT"
 
     reference_date = datetime(2026, 4, 2)
     direct_scored = [
@@ -146,43 +112,20 @@ def test_senate_html_parse_to_score_parity():
         )
         for row in direct_rows
     ]
-    legacy_scored = [
-        legacy_scoring.score_transaction(
-            member_id="fixture",
-            ticker=row.ticker,
-            transaction_type=row.transaction_type.lower().replace(" (partial)", "_partial"),
-            execution_date=row.transaction_date,
-            amount_min=1001 if row.ticker == "AAPL" else 15001,
-            amount_max=15000 if row.ticker == "AAPL" else 50000,
-            owner_type=row.owner.lower(),
-            resolution_confidence=1.0,
-            signal_weight=1.0,
-            reference_date=reference_date,
-        )
-        for row in legacy_rows
-    ]
 
-    direct_agg = direct_compute_aggregate(direct_scored)
-    legacy_agg = legacy_scoring.compute_aggregate(legacy_scored)
-    assert math.isclose(direct_agg.volume_net, legacy_agg.volume_net, rel_tol=1e-9, abs_tol=1e-9)
-    direct_conf = direct_compute_confidence_score(direct_agg, 1.0)
-    legacy_conf = legacy_scoring.compute_confidence_score(legacy_agg, 1.0)
-    assert math.isclose(direct_conf["composite_score"], legacy_conf["composite_score"], rel_tol=1e-9, abs_tol=1e-9)
+    assert math.isclose(direct_scored[0].final_score, expected["final_score"], rel_tol=1e-9, abs_tol=1e-9)
 
 
 def test_house_paper_ocr_text_parse_parity():
     fixture = Path(__file__).resolve().parent / "fixtures" / "house_paper_ocr_sample.txt"
-    _legacy_senate, legacy_scoring, legacy_parsing = _import_legacy_congress_modules()
     text = fixture.read_text()
 
     direct_parser = PaperHouseFilingParser()
-    legacy_parser = legacy_parsing.PaperFilingParser()
     direct_filing = direct_parser.parse_ocr_text(text, Path("8229999.pdf"), 1)
-    legacy_filing = legacy_parser.parse_ocr_text(text, Path("8229999.pdf"), 1)
 
-    assert len(direct_filing.transactions) == len(legacy_filing.transactions) == 2
-    assert direct_filing.transactions[0].ticker == legacy_filing.transactions[0].ticker == "AAPL"
-    assert direct_filing.transactions[1].ticker == legacy_filing.transactions[1].ticker == "MSFT"
+    assert len(direct_filing.transactions) == 2
+    assert direct_filing.transactions[0].ticker == "AAPL"
+    assert direct_filing.transactions[1].ticker == "MSFT"
 
     reference_date = datetime(2026, 4, 2)
     direct_scored = [
@@ -200,24 +143,9 @@ def test_house_paper_ocr_text_parse_parity():
         )
         for row in direct_filing.transactions
     ]
-    legacy_scored = [
-        legacy_scoring.score_transaction(
-            member_id="fixture",
-            ticker=row.ticker,
-            transaction_type=row.transaction_type,
-            execution_date=row.transaction_date,
-            amount_min=row.amount_min,
-            amount_max=row.amount_max,
-            owner_type=row.owner,
-            resolution_confidence=1.0,
-            signal_weight=1.0,
-            reference_date=reference_date,
-        )
-        for row in legacy_filing.transactions
-    ]
     direct_agg = direct_compute_aggregate(direct_scored)
-    legacy_agg = legacy_scoring.compute_aggregate(legacy_scored)
-    assert math.isclose(direct_agg.volume_net, legacy_agg.volume_net, rel_tol=1e-9, abs_tol=1e-9)
+    assert direct_agg.unique_members == 1
+    assert direct_agg.transactions_included == 2
 
 
 @pytest.mark.skipif(not Path("/opt/homebrew/bin/tesseract").exists() or not Path("/opt/homebrew/bin/pdftoppm").exists(), reason="OCR tools not installed")

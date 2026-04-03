@@ -16,15 +16,8 @@ The remaining legacy dependencies are now explicit and non-default.
 
 ### Explicit legacy compatibility surfaces
 - `src/signals/cli.py`
-  - `insider ingest`
-  - `insider parse`
-  - `insider classify`
-  - `insider run-legacy`
-  - `insider score`
-  - `congress init`
-  - `congress ingest`
-  - `congress parse`
-  - `congress score`
+  - deprecated shims under `insider ...` and `congress ...`
+  - explicit `compat insider ...` and `compat congress ...` commands
   - top-level `run --legacy`
 - `src/signals/core/legacy_subprocess.py`
 - `src/signals/core/legacy_loader.py`
@@ -41,11 +34,11 @@ The remaining legacy dependencies are now explicit and non-default.
 - `src/signals/insider/slice.py`
 - `src/signals/congress/slice.py`
 - `tests/test_unified_legacy_workflows.py`
-- `tests/test_engine_parity.py`
-- `tests/test_flow_parity.py`
 
-### Legacy fixtures still referenced by rewrite/parity tests
-- `legacy-insider/tests/fixtures/form4_simple_buy.xml`
+### Repo-native parity and fixture replacements completed
+- `tests/test_engine_parity.py` now uses frozen expected-output fixtures
+- `tests/test_flow_parity.py` now uses frozen expected-output fixtures
+- `tests/fixtures/insider/form4_simple_buy.xml` replaces the legacy-owned insider fixture
 
 ## Direct-Path Defaults Removed
 The following direct CLI defaults no longer point into legacy cache locations:
@@ -60,7 +53,7 @@ Legacy folders should not be archived or deleted until all of the following are 
 1. No default operator command depends on legacy code or legacy DBs.
 2. Legacy compatibility commands are either:
    - removed, or
-   - moved behind an explicit compatibility plugin/module boundary.
+   - isolated behind an explicit compatibility boundary.
 3. Parity tests no longer import legacy runtime modules directly.
 4. Required fixtures used by rewrite/parity tests are copied into non-legacy test fixture locations.
 5. `rg "legacy-insider|legacy-congress|run_legacy_cli|legacy_bridge|legacy_loader|legacy_subprocess" src tests`
@@ -70,17 +63,17 @@ Legacy folders should not be archived or deleted until all of the following are 
    - optional compatibility shims slated for removal.
 
 ## Recommended Removal Order
-1. Copy remaining legacy-owned fixtures into `tests/fixtures`.
-2. Replace parity tests that import legacy runtime modules with frozen expected-output fixtures.
-3. Remove legacy-backed slice helpers.
-4. Remove `src/signals/*/service.py` legacy import paths once no longer needed.
-5. Remove legacy CLI compatibility commands.
-6. Archive or delete `legacy-insider` and `legacy-congress`.
+1. Remove legacy-backed slice helpers.
+2. Remove `src/signals/*/service.py` legacy import paths once no longer needed.
+3. Remove deprecated top-level compatibility shims and keep only `compat ...` temporarily.
+4. Remove `compat ...` commands when no longer needed.
+5. Archive `legacy-insider` and `legacy-congress`.
+6. Delete archived legacy code only after one stable cycle with no dependency regressions.
 
 ## Current Assessment
 The system is operationally direct by default, but not yet purge-ready. The remaining legacy code is now mostly:
 - compatibility surface
-- parity/reference surface
+- explicit legacy workflow test/reference surface
 - non-default fallback surface
 
 That is a good place to be, but it is not yet equivalent to zero dependency.

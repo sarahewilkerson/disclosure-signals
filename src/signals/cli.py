@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import warnings
 from datetime import datetime
 from pathlib import Path
 
@@ -65,6 +66,15 @@ def default_congress_legacy_db() -> Path:
 
 def default_congress_rewrite_cache() -> Path:
     return repo_root() / "data" / "rewrite_cache" / "congress"
+
+
+def _compat_warning(cmd: str):
+    warnings.warn(
+        f"Command '{cmd}' is part of the legacy compatibility surface and is slated for removal. "
+        "Use the direct rewrite flows instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
 
 def cmd_slice_run(args):
@@ -155,6 +165,7 @@ def cmd_source_report(args):
 
 
 def cmd_insider_score(args):
+    _compat_warning("insider score")
     reference_date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else datetime.now()
     result = run_insider_legacy_score_into_derived(
         repo_root=repo_root(),
@@ -281,6 +292,7 @@ def cmd_insider_candidate_discovery(args):
 
 
 def cmd_insider_parse(args):
+    _compat_warning("insider parse")
     result = run_legacy_cli(
         repo_root() / "legacy-insider" / "cli.py",
         ["parse"],
@@ -293,6 +305,7 @@ def cmd_insider_parse(args):
 
 
 def cmd_insider_ingest(args):
+    _compat_warning("insider ingest")
     legacy_args = ["ingest", "--csv", args.csv]
     if args.max_filings is not None:
         legacy_args.extend(["--max-filings", str(args.max_filings)])
@@ -315,6 +328,7 @@ def cmd_insider_ingest(args):
 
 
 def cmd_insider_classify(args):
+    _compat_warning("insider classify")
     result = run_legacy_cli(
         repo_root() / "legacy-insider" / "cli.py",
         ["classify"],
@@ -327,6 +341,7 @@ def cmd_insider_classify(args):
 
 
 def cmd_insider_run_legacy(args):
+    _compat_warning("insider run-legacy")
     legacy_args = ["run", "--csv", args.csv]
     if args.date:
         legacy_args.extend(["--date", args.date])
@@ -344,6 +359,7 @@ def cmd_insider_run_legacy(args):
 
 
 def cmd_congress_score(args):
+    _compat_warning("congress score")
     result = run_congress_legacy_score_into_derived(
         repo_root=repo_root(),
         derived_db_path=args.db,
@@ -543,6 +559,7 @@ def cmd_congress_candidate_discovery(args):
 
 
 def cmd_congress_init(args):
+    _compat_warning("congress init")
     result = run_legacy_cli(
         repo_root() / "legacy-congress" / "cppi" / "cli.py",
         ["init"],
@@ -555,6 +572,7 @@ def cmd_congress_init(args):
 
 
 def cmd_congress_ingest(args):
+    _compat_warning("congress ingest")
     legacy_args = ["ingest", "--days", str(args.days)]
     if args.house_only:
         legacy_args.append("--house-only")
@@ -574,6 +592,7 @@ def cmd_congress_ingest(args):
 
 
 def cmd_congress_parse(args):
+    _compat_warning("congress parse")
     legacy_args = ["parse"]
     if args.force:
         legacy_args.append("--force")
@@ -633,6 +652,7 @@ def cmd_run(args):
             artifact_dir=Path(args.artifacts_dir) if args.artifacts_dir else None,
         )
     else:
+        _compat_warning("run --legacy")
         result = run_unified_pipeline(
             repo_root=repo_root(),
             derived_db_path=args.db,
@@ -771,26 +791,6 @@ def build_parser() -> argparse.ArgumentParser:
     insider_sub = insider.add_subparsers(dest="insider_command")
     insider_fixture = insider_sub.add_parser("fixture-run", help="Run the insider fixture through the shared slice flow")
     insider_fixture.set_defaults(func=cmd_insider_fixture)
-    insider_ingest = insider_sub.add_parser("ingest", help="Run the legacy insider ingest command")
-    insider_ingest.add_argument("--csv", required=True, help="Path to legacy insider universe CSV")
-    insider_ingest.add_argument("--max-filings", type=int, default=None, help="Max filings per company")
-    insider_ingest.add_argument("--start-date", dest="start_date", default=None, help="Historical backfill start date")
-    insider_ingest.add_argument("--end-date", dest="end_date", default=None, help="Historical backfill end date")
-    insider_ingest.add_argument("--async", dest="use_async", action="store_true", help="Use async mode in legacy insider ingest")
-    insider_ingest.add_argument("--concurrency", type=int, default=5, help="Async concurrency")
-    insider_ingest.set_defaults(func=cmd_insider_ingest)
-    insider_parse = insider_sub.add_parser("parse", help="Run the legacy insider parse command")
-    insider_parse.set_defaults(func=cmd_insider_parse)
-    insider_classify = insider_sub.add_parser("classify", help="Run the legacy insider classify command")
-    insider_classify.set_defaults(func=cmd_insider_classify)
-    insider_run = insider_sub.add_parser("run-legacy", help="Run the legacy insider full pipeline command")
-    insider_run.add_argument("--csv", required=True, help="Path to legacy insider universe CSV")
-    insider_run.add_argument("--date", default=None, help="Reference date YYYY-MM-DD")
-    insider_run.add_argument("--max-filings", type=int, default=None, help="Max filings per company")
-    insider_run.set_defaults(func=cmd_insider_run_legacy)
-    insider_score = insider_sub.add_parser("score", help="Run the legacy insider score flow and import derived results")
-    insider_score.add_argument("--date", default=None, help="Reference date YYYY-MM-DD")
-    insider_score.set_defaults(func=cmd_insider_score)
     insider_rewrite_ingest = insider_sub.add_parser("rewrite-ingest", help="Run the rewritten insider SEC ingest flow without the legacy insider DB")
     insider_rewrite_ingest.add_argument("--csv", required=True, help="Path to company universe CSV")
     insider_rewrite_ingest.add_argument("--cache-dir", default=str(default_insider_rewrite_cache()), help="Cache directory for SEC company map and raw Form 4 XML")
@@ -818,6 +818,26 @@ def build_parser() -> argparse.ArgumentParser:
     insider_candidates.add_argument("--run-id")
     insider_candidates.add_argument("--limit", type=int, default=10)
     insider_candidates.set_defaults(func=cmd_insider_candidate_discovery)
+    insider_ingest = insider_sub.add_parser("ingest", help="Deprecated compatibility alias for `compat insider ingest`")
+    insider_ingest.add_argument("--csv", required=True)
+    insider_ingest.add_argument("--max-filings", type=int)
+    insider_ingest.add_argument("--start-date")
+    insider_ingest.add_argument("--end-date")
+    insider_ingest.add_argument("--async", dest="use_async", action="store_true")
+    insider_ingest.add_argument("--concurrency", type=int, default=5)
+    insider_ingest.set_defaults(func=cmd_insider_ingest)
+    insider_parse = insider_sub.add_parser("parse", help="Deprecated compatibility alias for `compat insider parse`")
+    insider_parse.set_defaults(func=cmd_insider_parse)
+    insider_classify = insider_sub.add_parser("classify", help="Deprecated compatibility alias for `compat insider classify`")
+    insider_classify.set_defaults(func=cmd_insider_classify)
+    insider_run_legacy = insider_sub.add_parser("run-legacy", help="Deprecated compatibility alias for `compat insider run-legacy`")
+    insider_run_legacy.add_argument("--csv", required=True)
+    insider_run_legacy.add_argument("--date")
+    insider_run_legacy.add_argument("--max-filings", type=int)
+    insider_run_legacy.set_defaults(func=cmd_insider_run_legacy)
+    insider_score = insider_sub.add_parser("score", help="Deprecated compatibility alias for `compat insider score`")
+    insider_score.add_argument("--date")
+    insider_score.set_defaults(func=cmd_insider_score)
     insider_status = insider_sub.add_parser("status", help="Show insider legacy + derived status")
     insider_status.set_defaults(func=cmd_insider_status)
 
@@ -825,20 +845,6 @@ def build_parser() -> argparse.ArgumentParser:
     congress_sub = congress.add_subparsers(dest="congress_command")
     congress_fixture = congress_sub.add_parser("fixture-run", help="Run the congress fixture through the shared slice flow")
     congress_fixture.set_defaults(func=cmd_congress_fixture)
-    congress_init = congress_sub.add_parser("init", help="Run the legacy congress init command")
-    congress_init.set_defaults(func=cmd_congress_init)
-    congress_ingest = congress_sub.add_parser("ingest", help="Run the legacy congress ingest command")
-    congress_ingest.add_argument("--days", type=int, default=90, help="Lookback days")
-    congress_ingest.add_argument("--house-only", action="store_true", help="Only ingest House filings")
-    congress_ingest.add_argument("--senate-only", action="store_true", help="Only ingest Senate filings")
-    congress_ingest.add_argument("--bulk", action="store_true", help="Enable legacy bulk House ingestion")
-    congress_ingest.set_defaults(func=cmd_congress_ingest)
-    congress_parse = congress_sub.add_parser("parse", help="Run the legacy congress parse command")
-    congress_parse.add_argument("--force", action="store_true", help="Force re-parsing in the legacy congress engine")
-    congress_parse.set_defaults(func=cmd_congress_parse)
-    congress_score = congress_sub.add_parser("score", help="Run the legacy congress score flow and import derived entity results")
-    congress_score.add_argument("--window", type=int, default=90, help="Lookback window in days")
-    congress_score.set_defaults(func=cmd_congress_score)
     congress_rewrite_ingest_house = congress_sub.add_parser("rewrite-ingest-house", help="Download real House PTR PDFs directly into the rewrite cache without the legacy congress DB")
     congress_rewrite_ingest_house.add_argument("--cache-dir", default=str(default_congress_rewrite_cache()), help="Rewrite cache root for House PDFs and FD XML")
     congress_rewrite_ingest_house.add_argument("--days", type=int, default=90, help="Lookback days for FD XML PTR filtering")
@@ -888,8 +894,74 @@ def build_parser() -> argparse.ArgumentParser:
     congress_candidates.add_argument("--run-id")
     congress_candidates.add_argument("--limit", type=int, default=10)
     congress_candidates.set_defaults(func=cmd_congress_candidate_discovery)
+    congress_init = congress_sub.add_parser("init", help="Deprecated compatibility alias for `compat congress init`")
+    congress_init.set_defaults(func=cmd_congress_init)
+    congress_ingest = congress_sub.add_parser("ingest", help="Deprecated compatibility alias for `compat congress ingest`")
+    congress_ingest.add_argument("--days", type=int, default=90)
+    congress_ingest.add_argument("--house-only", action="store_true")
+    congress_ingest.add_argument("--senate-only", action="store_true")
+    congress_ingest.add_argument("--bulk", action="store_true")
+    congress_ingest.set_defaults(func=cmd_congress_ingest)
+    congress_parse = congress_sub.add_parser("parse", help="Deprecated compatibility alias for `compat congress parse`")
+    congress_parse.add_argument("--force", action="store_true")
+    congress_parse.set_defaults(func=cmd_congress_parse)
+    congress_score = congress_sub.add_parser("score", help="Deprecated compatibility alias for `compat congress score`")
+    congress_score.add_argument("--window", type=int, default=90)
+    congress_score.set_defaults(func=cmd_congress_score)
     congress_status = congress_sub.add_parser("status", help="Show congress legacy + derived status")
     congress_status.set_defaults(func=cmd_congress_status)
+
+    compat = subparsers.add_parser("compat", help="Legacy compatibility commands (slated for removal)")
+    compat_sub = compat.add_subparsers(dest="compat_command")
+
+    ins_compat = compat_sub.add_parser("insider", help="Legacy insider commands")
+    ins_compat_sub = ins_compat.add_subparsers(dest="insider_compat_command")
+    
+    ins_ingest = ins_compat_sub.add_parser("ingest", help="Legacy insider ingest")
+    ins_ingest.add_argument("--csv", required=True)
+    ins_ingest.add_argument("--max-filings", type=int)
+    ins_ingest.add_argument("--start-date")
+    ins_ingest.add_argument("--end-date")
+    ins_ingest.add_argument("--async", dest="use_async", action="store_true")
+    ins_ingest.add_argument("--concurrency", type=int, default=5)
+    ins_ingest.set_defaults(func=cmd_insider_ingest)
+
+    ins_parse = ins_compat_sub.add_parser("parse")
+    ins_parse.set_defaults(func=cmd_insider_parse)
+
+    ins_classify = ins_compat_sub.add_parser("classify")
+    ins_classify.set_defaults(func=cmd_insider_classify)
+
+    ins_run = ins_compat_sub.add_parser("run-legacy")
+    ins_run.add_argument("--csv", required=True)
+    ins_run.add_argument("--date")
+    ins_run.add_argument("--max-filings", type=int)
+    ins_run.set_defaults(func=cmd_insider_run_legacy)
+
+    ins_score = ins_compat_sub.add_parser("score")
+    ins_score.add_argument("--date")
+    ins_score.set_defaults(func=cmd_insider_score)
+
+    cong_compat = compat_sub.add_parser("congress", help="Legacy congress commands")
+    cong_compat_sub = cong_compat.add_subparsers(dest="congress_compat_command")
+
+    cong_init = cong_compat_sub.add_parser("init")
+    cong_init.set_defaults(func=cmd_congress_init)
+
+    cong_ingest = cong_compat_sub.add_parser("ingest")
+    cong_ingest.add_argument("--days", type=int, default=90)
+    cong_ingest.add_argument("--house-only", action="store_true")
+    cong_ingest.add_argument("--senate-only", action="store_true")
+    cong_ingest.add_argument("--bulk", action="store_true")
+    cong_ingest.set_defaults(func=cmd_congress_ingest)
+
+    cong_parse = cong_compat_sub.add_parser("parse")
+    cong_parse.add_argument("--force", action="store_true")
+    cong_parse.set_defaults(func=cmd_congress_parse)
+
+    cong_score = cong_compat_sub.add_parser("score")
+    cong_score.add_argument("--window", type=int, default=90)
+    cong_score.set_defaults(func=cmd_congress_score)
 
     combined = subparsers.add_parser("combined", help="Combined overlay commands")
     combined_sub = combined.add_subparsers(dest="combined_command")

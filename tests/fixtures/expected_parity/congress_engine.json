@@ -1,0 +1,55 @@
+{
+  "single": {
+    "member_id": "member-1",
+    "ticker": "AAPL",
+    "transaction_type": "purchase",
+    "execution_date": "2026-03-01T00:00:00",
+    "amount_min": 15001,
+    "amount_max": 50000,
+    "owner_type": "self",
+    "base_value": 27387.040730973473,
+    "direction": 1.0,
+    "staleness_penalty": 1.0,
+    "owner_weight": 1.0,
+    "resolution_confidence": 1.0,
+    "signal_weight": 1.0,
+    "raw_score": 27387.040730973473,
+    "final_score": 27387.040730973473
+  },
+  "aggregate": {
+    "breadth_pct": 1.0,
+    "unique_members": 1,
+    "buyers": 1,
+    "sellers": 0,
+    "neutral": 0,
+    "volume_net": 1369.3520365486738,
+    "volume_buy": 1369.3520365486738,
+    "volume_sell": 0,
+    "concentration_top5": 1.0,
+    "is_concentrated": true,
+    "members_capped": 1,
+    "mean_staleness": 1.0,
+    "transactions_included": 1,
+    "transactions_excluded": 0
+  },
+  "confidence": {
+    "composite_score": 0.5055000000000001,
+    "tier": "MODERATE",
+    "factors": {
+      "member_coverage": 0.02,
+      "transaction_volume": 0.005,
+      "resolution_quality": 1.0,
+      "timeliness": 1.0,
+      "balance": 1.0,
+      "concentration": 0.0
+    },
+    "weights": {
+      "member_coverage": 0.25,
+      "resolution_quality": 0.2,
+      "timeliness": 0.2,
+      "concentration": 0.15,
+      "transaction_volume": 0.1,
+      "balance": 0.1
+    }
+  }
+}
