@@ -41,6 +41,7 @@ class DirectCongressRunResult:
     imported_normalized_count: int
     imported_result_count: int
     skipped_count: int
+    skip_reasons: dict[str, int]
     pdf_dir: str
 
     def to_dict(self) -> dict:
@@ -105,14 +106,17 @@ def run_direct_house_pdfs_into_derived(
     scored_by_subject: dict[str, list] = defaultdict(list)
     record_ids_by_subject: dict[str, list[str]] = defaultdict(list)
     skipped_count = 0
+    skip_reasons: dict[str, int] = defaultdict(int)
 
     for pdf_path in pdf_files:
         filing, skip_reason = parse_house_pdf_text_only(repo_root, pdf_path)
         if filing is None:
             skipped_count += 1
+            skip_reasons[skip_reason or "unknown"] += 1
             continue
         if skip_reason and not filing.transactions:
             skipped_count += 1
+            skip_reasons[skip_reason] += 1
             continue
         for idx, txn in enumerate(filing.transactions, start=1):
             source_record_id = f"congress-house:{filing.filing_id or pdf_path.stem}:{idx}"
@@ -256,6 +260,7 @@ def run_direct_house_pdfs_into_derived(
                 "score_count": len(results),
                 "pdf_count": len(pdf_files),
                 "skipped_count": skipped_count,
+                "skip_reasons": dict(skip_reasons),
             },
         )
 
@@ -265,5 +270,6 @@ def run_direct_house_pdfs_into_derived(
         imported_normalized_count=len(normalized_rows),
         imported_result_count=len(results),
         skipped_count=skipped_count,
+        skip_reasons=dict(skip_reasons),
         pdf_dir=str(pdf_root),
     )

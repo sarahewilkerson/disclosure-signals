@@ -51,3 +51,4 @@ def test_direct_house_rewrite_persists_rows(tmp_path, monkeypatch):
     assert result.pdf_count == 1
     assert result.imported_normalized_count == 1
     assert result.imported_result_count == 1
+    assert result.skip_reasons == {}
