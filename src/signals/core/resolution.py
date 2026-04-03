@@ -13,7 +13,16 @@ from signals.core.versioning import RESOLUTION_METHOD_VERSION
 def _normalize_name(name: str | None) -> str | None:
     if not name:
         return None
-    normalized = re.sub(r"[^a-z0-9]+", " ", name.lower()).strip()
+    normalized = name.lower()
+    normalized = normalized.replace("cmn class a", " ")
+    normalized = normalized.replace("common stock", " ")
+    normalized = re.sub(r"\bcm[i|l]?n\b", " ", normalized)
+    normalized = re.sub(r"\bclass\s+[a-z]\b", " ", normalized)
+    normalized = re.sub(r"\bsponsored\s+adr\b", " ", normalized)
+    normalized = re.sub(r"\badr\b", " ", normalized)
+    normalized = re.sub(r"^[^a-z0-9]+", " ", normalized)
+    normalized = re.sub(r"\boc\b", " ", normalized)
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized).strip()
     return normalized or None
 
 

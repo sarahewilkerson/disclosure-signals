@@ -35,3 +35,19 @@ def test_resolve_entity_falls_back_to_name_aliases():
 
     assert event.entity_key == "entity:microsoft"
     assert event.ticker == "MSFT"
+
+
+def test_resolve_entity_normalizes_dirty_ocr_common_stock_names():
+    event = resolve_entity(
+        source="congress",
+        source_record_id="row-3",
+        source_filing_id="filing-3",
+        ticker=None,
+        cik=None,
+        issuer_name="{WALMARTINCCMN — -",
+        instrument_type=None,
+        run_id="run-3",
+    )
+
+    assert event.entity_key == "entity:walmart"
+    assert event.ticker == "WMT"

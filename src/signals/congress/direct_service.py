@@ -13,6 +13,7 @@ from signals.congress.engine import (
     score_transaction,
 )
 from signals.congress.parser import parse_house_pdf_text_only
+from signals.congress.resolution import resolve_transaction
 from signals.core.derived_db import (
     get_connection,
     init_db,
@@ -130,15 +131,23 @@ def run_direct_house_pdfs_into_derived(
                 instrument_type=txn.asset_type,
                 run_id=run.run_id,
             )
+            asset_resolution = resolve_transaction(
+                asset_name=txn.asset_name,
+                ticker=resolution_event.ticker or txn.ticker,
+                asset_type_code=txn.asset_type,
+            )
             resolution_events[source_record_id] = resolution_event
             include = (
-                resolution_event.resolution_status == ResolutionStatus.RESOLVED.value
+                asset_resolution.include_in_signal
+                and resolution_event.resolution_status == ResolutionStatus.RESOLVED.value
                 and bool(resolution_event.ticker)
                 and txn.transaction_type in {"purchase", "sale", "sale_partial"}
             )
             if include:
                 exclusion_reason_code = None
-            elif not txn.ticker:
+            elif not asset_resolution.include_in_signal:
+                exclusion_reason_code = ReasonCode.NON_SIGNAL_ASSET.value
+            elif not resolution_event.ticker:
                 exclusion_reason_code = ReasonCode.MISSING_TICKER.value
             elif resolution_event.resolution_status != ResolutionStatus.RESOLVED.value:
                 exclusion_reason_code = ReasonCode.LOW_RESOLUTION_CONFIDENCE.value
@@ -185,6 +194,16 @@ def run_direct_house_pdfs_into_derived(
                     "page_number": txn.page_number,
                     "raw_line": txn.raw_line,
                     "resolver_evidence": resolution_event.evidence_payload,
+                    "asset_resolution": {
+                        "resolved_ticker": asset_resolution.resolved_ticker,
+                        "resolved_company": asset_resolution.resolved_company,
+                        "category": asset_resolution.category.value,
+                        "resolution_method": asset_resolution.resolution_method,
+                        "resolution_confidence": asset_resolution.resolution_confidence,
+                        "include_in_signal": asset_resolution.include_in_signal,
+                        "exclusion_reason": asset_resolution.exclusion_reason,
+                        "signal_relevance_weight": asset_resolution.signal_relevance_weight,
+                    },
                     "method_versions": {
                         "normalization": NORMALIZATION_METHOD_VERSION,
                         "resolution": RESOLUTION_METHOD_VERSION,
