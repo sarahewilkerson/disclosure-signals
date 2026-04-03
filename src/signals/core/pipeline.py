@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from signals.combined.diagnostics import build_overlay_diagnostics
+from signals.congress.diagnostics import build_house_quality_metrics
 from signals.combined.service import build_from_derived
 from signals.congress.direct_service import run_direct_house_pdfs_into_derived
 from signals.congress.senate_direct import ingest_senate_ptrs_direct, run_direct_senate_html_into_derived
@@ -326,6 +327,12 @@ def run_direct_pipeline(
             _typed_signal_results(congress_payload["source_results"]),
             combined.blocked_rows,
         )
+        house_quality_metrics = build_house_quality_metrics(
+            conn,
+            run_id=house.run_id,
+            skipped_count=getattr(house, "skipped_count", 0),
+            skip_reasons=getattr(house, "skip_reasons", {}),
+        )
         (
             run_summary,
             parity_report,
@@ -353,12 +360,14 @@ def run_direct_pipeline(
                 "house": house.to_dict(),
                 "senate": senate.to_dict(),
                 "combined": combined.to_dict(),
+                "house_quality_metrics": house_quality_metrics,
             })),
             "parity_report": str(write_json(base / "parity_report.json", parity_report)),
             "exclusion_histogram": str(write_json(base / "exclusion_histogram.json", exclusion_histogram)),
             "unresolved_entities": str(write_json(base / "unresolved_entities.json", unresolved_entities)),
             "combined_block_report": str(write_json(base / "combined_block_report.json", combined_block_report)),
             "overlay_diagnostics": str(write_json(base / "overlay_diagnostics.json", overlay_diagnostics)),
+            "house_quality_metrics": str(write_json(base / "house_quality_metrics.json", house_quality_metrics)),
             "insider_report_json": str(write_json(base / "insider_report.json", insider_payload)),
             "congress_report_json": str(write_json(base / "congress_report.json", congress_payload)),
             "combined_report_json": str(write_json(base / "combined_report.json", combined_payload)),
