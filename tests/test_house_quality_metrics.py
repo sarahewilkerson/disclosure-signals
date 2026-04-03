@@ -54,7 +54,7 @@ def test_house_quality_metrics_reports_recovery_and_precision(tmp_path):
                 include_in_signal=True,
                 exclusion_reason_code=None,
                 exclusion_reason_detail=None,
-                provenance_payload={},
+                provenance_payload={"asset_resolution": {"category": "common_stock"}},
                 normalization_method_version="n",
                 run_id=run.run_id,
             ),
@@ -94,7 +94,7 @@ def test_house_quality_metrics_reports_recovery_and_precision(tmp_path):
                 include_in_signal=False,
                 exclusion_reason_code="NON_SIGNAL_ASSET",
                 exclusion_reason_detail=None,
-                provenance_payload={},
+                provenance_payload={"asset_resolution": {"category": "treasury"}},
                 normalization_method_version="n",
                 run_id=run.run_id,
             ),
@@ -134,7 +134,7 @@ def test_house_quality_metrics_reports_recovery_and_precision(tmp_path):
                 include_in_signal=False,
                 exclusion_reason_code="NON_SIGNAL_ASSET",
                 exclusion_reason_detail=None,
-                provenance_payload={},
+                provenance_payload={"asset_resolution": {"category": "unknown"}},
                 normalization_method_version="n",
                 run_id=run.run_id,
             ),
@@ -174,7 +174,7 @@ def test_house_quality_metrics_reports_recovery_and_precision(tmp_path):
                 include_in_signal=False,
                 exclusion_reason_code="MISSING_TICKER",
                 exclusion_reason_detail=None,
-                provenance_payload={},
+                provenance_payload={"asset_resolution": {"category": "unknown"}},
                 normalization_method_version="n",
                 run_id=run.run_id,
             ),
@@ -219,6 +219,9 @@ def test_house_quality_metrics_reports_recovery_and_precision(tmp_path):
     assert payload["included_rate"] == 0.25
     assert payload["skip_reasons"] == {"nothing_to_report": 1, "ocr_failed": 1}
     assert payload["exclusion_reason_counts"] == {"MISSING_TICKER": 1, "NON_SIGNAL_ASSET": 2}
+    assert payload["asset_category_counts"] == {"common_stock": 1, "treasury": 1, "unknown": 2}
+    assert payload["unresolved_asset_category_counts"] == {"treasury": 1, "unknown": 2}
+    assert payload["non_signal_asset_category_counts"] == {"treasury": 1, "unknown": 1}
     assert payload["top_unresolved_issuers"] == [
         {"issuer_name": "Dirty OCR Common Stock", "count": 1},
         {"issuer_name": "US Treasury Note 4%", "count": 1},

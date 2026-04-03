@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 
 
@@ -12,7 +13,7 @@ def build_house_quality_metrics(
 ) -> dict:
     normalized_rows = conn.execute(
         """
-        SELECT exclusion_reason_code, include_in_signal, ticker, entity_key, issuer_name
+        SELECT exclusion_reason_code, include_in_signal, ticker, entity_key, issuer_name, provenance_payload
         FROM normalized_transactions
         WHERE source = 'congress' AND run_id = ?
         """,
@@ -33,10 +34,22 @@ def build_house_quality_metrics(
     unresolved_signal_like_issuer_counts: dict[str, int] = {}
     unresolved_non_signal_issuer_counts: dict[str, int] = {}
     recovered_issuer_counts: dict[str, int] = {}
+    asset_category_counts: dict[str, int] = {}
+    unresolved_asset_category_counts: dict[str, int] = {}
+    non_signal_asset_category_counts: dict[str, int] = {}
     for row in normalized_rows:
         code = row["exclusion_reason_code"]
+        asset_resolution = row["provenance_payload"]
+        category = "<unknown>"
+        if isinstance(asset_resolution, str):
+            try:
+                payload = json.loads(asset_resolution)
+                category = payload.get("asset_resolution", {}).get("category") or "<unknown>"
+            except Exception:
+                category = "<unknown>"
         if code:
             exclusion_counts[code] = exclusion_counts.get(code, 0) + 1
+        asset_category_counts[category] = asset_category_counts.get(category, 0) + 1
         if row["include_in_signal"]:
             included_count += 1
             issuer = row["issuer_name"] or "<unknown>"
@@ -47,10 +60,12 @@ def build_house_quality_metrics(
             unresolved_count += 1
             issuer = row["issuer_name"] or "<unknown>"
             unresolved_issuer_counts[issuer] = unresolved_issuer_counts.get(issuer, 0) + 1
+            unresolved_asset_category_counts[category] = unresolved_asset_category_counts.get(category, 0) + 1
             if code in {"MISSING_TICKER", "LOW_RESOLUTION_CONFIDENCE"}:
                 unresolved_signal_like_issuer_counts[issuer] = unresolved_signal_like_issuer_counts.get(issuer, 0) + 1
             elif code == "NON_SIGNAL_ASSET":
                 unresolved_non_signal_issuer_counts[issuer] = unresolved_non_signal_issuer_counts.get(issuer, 0) + 1
+                non_signal_asset_category_counts[category] = non_signal_asset_category_counts.get(category, 0) + 1
 
     normalized_count = len(normalized_rows)
     scored_signal_rate = (scored_count / normalized_count) if normalized_count else 0.0
@@ -107,6 +122,9 @@ def build_house_quality_metrics(
         "skipped_count": skipped_count,
         "skip_reasons": dict(sorted(skip_reasons.items())),
         "exclusion_reason_counts": dict(sorted(exclusion_counts.items())),
+        "asset_category_counts": dict(sorted(asset_category_counts.items())),
+        "unresolved_asset_category_counts": dict(sorted(unresolved_asset_category_counts.items())),
+        "non_signal_asset_category_counts": dict(sorted(non_signal_asset_category_counts.items())),
         "top_unresolved_issuers": top_unresolved_issuers,
         "top_signal_like_unresolved_issuers": top_signal_like_unresolved_issuers,
         "top_non_signal_unresolved_issuers": top_non_signal_unresolved_issuers,
