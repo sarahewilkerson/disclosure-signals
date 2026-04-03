@@ -12,7 +12,7 @@ def build_house_quality_metrics(
 ) -> dict:
     normalized_rows = conn.execute(
         """
-        SELECT exclusion_reason_code, include_in_signal, ticker, entity_key
+        SELECT exclusion_reason_code, include_in_signal, ticker, entity_key, issuer_name
         FROM normalized_transactions
         WHERE source = 'congress' AND run_id = ?
         """,
@@ -29,21 +29,56 @@ def build_house_quality_metrics(
     unresolved_count = 0
     resolved_entity_count = 0
     included_count = 0
+    unresolved_issuer_counts: dict[str, int] = {}
+    recovered_issuer_counts: dict[str, int] = {}
     for row in normalized_rows:
         code = row["exclusion_reason_code"]
         if code:
             exclusion_counts[code] = exclusion_counts.get(code, 0) + 1
         if row["include_in_signal"]:
             included_count += 1
+            issuer = row["issuer_name"] or "<unknown>"
+            recovered_issuer_counts[issuer] = recovered_issuer_counts.get(issuer, 0) + 1
         if row["entity_key"] and row["ticker"]:
             resolved_entity_count += 1
         else:
             unresolved_count += 1
+            issuer = row["issuer_name"] or "<unknown>"
+            unresolved_issuer_counts[issuer] = unresolved_issuer_counts.get(issuer, 0) + 1
 
     normalized_count = len(normalized_rows)
     scored_signal_rate = (scored_count / normalized_count) if normalized_count else 0.0
     resolved_entity_rate = (resolved_entity_count / normalized_count) if normalized_count else 0.0
     included_rate = (included_count / normalized_count) if normalized_count else 0.0
+
+    top_unresolved_issuers = [
+        {"issuer_name": issuer, "count": count}
+        for issuer, count in sorted(unresolved_issuer_counts.items(), key=lambda item: (-item[1], item[0]))[:10]
+    ]
+    top_recovered_issuers = [
+        {"issuer_name": issuer, "count": count}
+        for issuer, count in sorted(recovered_issuer_counts.items(), key=lambda item: (-item[1], item[0]))[:10]
+    ]
+
+    scored_subjects = conn.execute(
+        """
+        SELECT subject_key, label, score, confidence, input_count
+        FROM signal_results
+        WHERE source = 'congress' AND run_id = ?
+        ORDER BY subject_key
+        """,
+        (run_id,),
+    ).fetchall()
+    top_scored_subjects = [
+        {
+            "subject_key": row["subject_key"],
+            "label": row["label"],
+            "score": row["score"],
+            "confidence": row["confidence"],
+            "input_count": row["input_count"],
+        }
+        for row in scored_subjects[:10]
+    ]
 
     return {
         "run_id": run_id,
@@ -58,4 +93,7 @@ def build_house_quality_metrics(
         "skipped_count": skipped_count,
         "skip_reasons": dict(sorted(skip_reasons.items())),
         "exclusion_reason_counts": dict(sorted(exclusion_counts.items())),
+        "top_unresolved_issuers": top_unresolved_issuers,
+        "top_recovered_issuers": top_recovered_issuers,
+        "top_scored_subjects": top_scored_subjects,
     }

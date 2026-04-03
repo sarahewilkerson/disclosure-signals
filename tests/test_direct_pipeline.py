@@ -187,6 +187,9 @@ def test_run_direct_pipeline_writes_house_quality_artifact(tmp_path, monkeypatch
             "skipped_count": skipped_count,
             "skip_reasons": skip_reasons,
             "exclusion_reason_counts": {"NON_SIGNAL_ASSET": 1},
+            "top_unresolved_issuers": [{"issuer_name": "Noise Asset", "count": 1}],
+            "top_recovered_issuers": [{"issuer_name": "Walmart Inc.", "count": 2}],
+            "top_scored_subjects": [{"subject_key": "entity:wmt", "label": "bullish", "score": 1.0, "confidence": 0.5, "input_count": 2}],
         },
     )
 

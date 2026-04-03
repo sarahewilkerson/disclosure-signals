@@ -179,3 +179,19 @@ def test_house_quality_metrics_reports_recovery_and_precision(tmp_path):
     assert payload["included_rate"] == 0.3333
     assert payload["skip_reasons"] == {"nothing_to_report": 1, "ocr_failed": 1}
     assert payload["exclusion_reason_counts"] == {"NON_SIGNAL_ASSET": 2}
+    assert payload["top_unresolved_issuers"] == [
+        {"issuer_name": "US Treasury Note 4%", "count": 1},
+        {"issuer_name": "pc _ | USD", "count": 1},
+    ]
+    assert payload["top_recovered_issuers"] == [
+        {"issuer_name": "Walmart Inc.", "count": 1},
+    ]
+    assert payload["top_scored_subjects"] == [
+        {
+            "subject_key": "entity:wmt",
+            "label": "bullish",
+            "score": 1.0,
+            "confidence": 0.5,
+            "input_count": 1,
+        }
+    ]
