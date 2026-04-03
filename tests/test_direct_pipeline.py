@@ -144,6 +144,7 @@ def test_run_direct_pipeline_composes_direct_flows(tmp_path, monkeypatch):
     assert result.insider["score"]["imported_result_count"] == 3
     assert result.congress["imported_result_count"] == 12
     assert result.combined["combined_count"] == 1
+    assert result.congress["house_quality_metrics"]["run_id"] == "house-run"
 
 
 def test_run_direct_pipeline_writes_house_quality_artifact(tmp_path, monkeypatch):
@@ -238,3 +239,6 @@ def test_run_direct_pipeline_writes_house_quality_artifact(tmp_path, monkeypatch
 
     assert result.artifact_paths["house_quality_metrics"].endswith("house_quality_metrics.json")
     assert (artifacts / "house_quality_metrics.json").exists()
+    assert result.congress["house_quality_metrics"]["top_signal_like_unresolved_issuers"] == [
+        {"issuer_name": "Dirty OCR Common Stock", "count": 1}
+    ]

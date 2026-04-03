@@ -384,6 +384,7 @@ def run_direct_pipeline(
         congress={
             "house_ingest": house_ingest.to_dict(),
             "house_score": house.to_dict(),
+            "house_quality_metrics": house_quality_metrics,
             "senate_ingest": senate_ingest.to_dict(),
             "senate_score": senate.to_dict(),
             "imported_result_count": house.imported_result_count + senate.imported_result_count,
