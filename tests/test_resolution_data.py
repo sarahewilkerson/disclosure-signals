@@ -51,3 +51,19 @@ def test_resolve_entity_normalizes_dirty_ocr_common_stock_names():
 
     assert event.entity_key == "entity:walmart"
     assert event.ticker == "WMT"
+
+
+def test_resolve_entity_strips_short_ocr_prefix_tokens():
+    event = resolve_entity(
+        source="congress",
+        source_record_id="row-4",
+        source_filing_id="filing-4",
+        ticker=None,
+        cik=None,
+        issuer_name="oc | NVIDIA CORPORATION CMN",
+        instrument_type=None,
+        run_id="run-4",
+    )
+
+    assert event.entity_key == "entity:nvidia"
+    assert event.ticker == "NVDA"

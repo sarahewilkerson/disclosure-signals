@@ -23,6 +23,12 @@ def _normalize_name(name: str | None) -> str | None:
     normalized = re.sub(r"^[^a-z0-9]+", " ", normalized)
     normalized = re.sub(r"\boc\b", " ", normalized)
     normalized = re.sub(r"[^a-z0-9]+", " ", normalized).strip()
+    tokens = normalized.split()
+    while len(tokens) > 2 and len(tokens[0]) <= 2:
+        tokens.pop(0)
+    while len(tokens) > 2 and len(tokens[-1]) <= 1:
+        tokens.pop()
+    normalized = " ".join(tokens)
     return normalized or None
 
 
@@ -48,7 +54,9 @@ def _canonical_indexes() -> tuple[dict[str, dict], dict[str, dict], dict[str, li
             for alias in aliases:
                 normalized = _normalize_name(alias)
                 if normalized:
-                    by_name.setdefault(normalized, []).append(record)
+                    existing = by_name.setdefault(normalized, [])
+                    if not any(item["entity_key"] == record["entity_key"] for item in existing):
+                        existing.append(record)
     return by_ticker, by_cik, by_name
 
 
