@@ -261,6 +261,8 @@ def run_direct_senate_html_into_derived(
             "score": CONGRESS_SCORE_METHOD_VERSION,
         },
     )
+    with get_connection(derived_db_path) as conn:
+        insert_run(conn, run)
 
     senate = SenateConnector(cache_dir=html_root.parent.parent, request_delay=0.0)
 
@@ -268,167 +270,183 @@ def run_direct_senate_html_into_derived(
     resolution_events: dict[str, object] = {}
     scored_by_subject: dict[str, list] = defaultdict(list)
     record_ids_by_subject: dict[str, list[str]] = defaultdict(list)
+    results: list[tuple[SignalResult, str]] = []
     skipped_count = 0
 
-    for html_path in html_files:
-        ptr_id = html_path.stem.replace("ptr_", "")
-        transactions = senate.parse_ptr_transactions(html_path)
-        if not transactions:
-            skipped_count += 1
-            continue
-        filing_id = f"senate:{ptr_id}"
-        for idx, txn in enumerate(transactions, start=1):
-            source_record_id = f"{filing_id}:{idx}"
-            native_res = resolve_transaction(
-                asset_name=txn.asset_name or "",
-                ticker=txn.ticker,
-                asset_type_code=txn.asset_type,
-            )
-            resolution_event = resolve_entity(
-                source="congress",
-                source_record_id=source_record_id,
-                source_filing_id=filing_id,
-                ticker=native_res.resolved_ticker or txn.ticker,
-                cik=None,
-                issuer_name=native_res.resolved_company or txn.asset_name,
-                instrument_type=txn.asset_type,
-                run_id=run.run_id,
-            )
-            resolution_events[source_record_id] = resolution_event
-            txn_type = _normalize_txn_type(txn.transaction_type)
-            amount_min, amount_max = _parse_amount_range(repo_root, txn.amount_range)
-            include = bool(native_res.include_in_signal and resolution_event.ticker and txn_type in {"purchase", "sale", "sale_partial"})
-            normalized = NormalizedTransaction(
-                source="congress",
-                source_record_id=source_record_id,
-                source_filing_id=filing_id,
-                actor_id=ptr_id,
-                actor_name=None,
-                actor_type="senator",
-                owner_type=_normalize_owner(txn.owner),
-                entity_key=resolution_event.entity_key,
-                instrument_key=resolution_event.instrument_key,
-                ticker=resolution_event.ticker,
-                issuer_name=resolution_event.issuer_name or txn.asset_name,
-                instrument_type=txn.asset_type,
-                transaction_type=txn_type,
-                direction=_direction(txn_type),
-                execution_date=txn.transaction_date.strftime("%Y-%m-%d") if txn.transaction_date else None,
-                disclosure_date=reference_date.strftime("%Y-%m-%d"),
-                amount_low=float(amount_min) if amount_min is not None else None,
-                amount_high=float(amount_max) if amount_max is not None else None,
-                amount_estimate=((float(amount_min) + float(amount_max)) / 2.0) if amount_min is not None and amount_max is not None else None,
-                currency="USD",
-                units_low=None,
-                units_high=None,
-                price_low=None,
-                price_high=None,
-                quality_score=1.0,
-                parse_confidence=1.0,
-                resolution_event_id=resolution_event.event_id,
-                resolution_confidence=resolution_event.resolution_confidence,
-                resolution_method_version=RESOLUTION_METHOD_VERSION,
-                include_in_signal=include,
-                exclusion_reason_code=None if include else (ReasonCode.MISSING_TICKER.value if not resolution_event.ticker else ReasonCode.NON_SIGNAL_ASSET.value),
-                exclusion_reason_detail=native_res.exclusion_reason,
-                provenance_payload={
-                    "source_system": "direct-senate-html",
-                    "raw_record_id": source_record_id,
-                    "raw_filing_id": filing_id,
-                    "html_path": str(html_path),
-                    "amount_range": txn.amount_range,
-                    "comment": txn.comment,
-                    "resolver_evidence": resolution_event.evidence_payload,
-                    "native_resolution": {
-                        "method": native_res.resolution_method,
-                        "confidence": native_res.resolution_confidence,
-                        "include_in_signal": native_res.include_in_signal,
-                        "exclusion_reason": native_res.exclusion_reason,
-                    },
-                    "method_versions": {
-                        "normalization": NORMALIZATION_METHOD_VERSION,
-                        "resolution": RESOLUTION_METHOD_VERSION,
-                        "score": CONGRESS_SCORE_METHOD_VERSION,
-                    },
-                    "imported_at": utcnow_iso(),
-                },
-                normalization_method_version=NORMALIZATION_METHOD_VERSION,
-                run_id=run.run_id,
-            )
-            normalized_rows.append(normalized)
-
-            if not include or not normalized.ticker:
+    try:
+        for html_path in html_files:
+            ptr_id = html_path.stem.replace("ptr_", "")
+            transactions = senate.parse_ptr_transactions(html_path)
+            if not transactions:
+                skipped_count += 1
                 continue
+            filing_id = f"senate:{ptr_id}"
+            for idx, txn in enumerate(transactions, start=1):
+                source_record_id = f"{filing_id}:{idx}"
+                native_res = resolve_transaction(
+                    asset_name=txn.asset_name or "",
+                    ticker=txn.ticker,
+                    asset_type_code=txn.asset_type,
+                )
+                resolution_event = resolve_entity(
+                    source="congress",
+                    source_record_id=source_record_id,
+                    source_filing_id=filing_id,
+                    ticker=native_res.resolved_ticker or txn.ticker,
+                    cik=None,
+                    issuer_name=native_res.resolved_company or txn.asset_name,
+                    instrument_type=txn.asset_type,
+                    run_id=run.run_id,
+                )
+                resolution_events[source_record_id] = resolution_event
+                txn_type = _normalize_txn_type(txn.transaction_type)
+                amount_min, amount_max = _parse_amount_range(repo_root, txn.amount_range)
+                include = bool(native_res.include_in_signal and resolution_event.ticker and txn_type in {"purchase", "sale", "sale_partial"})
+                normalized = NormalizedTransaction(
+                    source="congress",
+                    source_record_id=source_record_id,
+                    source_filing_id=filing_id,
+                    actor_id=ptr_id,
+                    actor_name=None,
+                    actor_type="senator",
+                    owner_type=_normalize_owner(txn.owner),
+                    entity_key=resolution_event.entity_key,
+                    instrument_key=resolution_event.instrument_key,
+                    ticker=resolution_event.ticker,
+                    issuer_name=resolution_event.issuer_name or txn.asset_name,
+                    instrument_type=txn.asset_type,
+                    transaction_type=txn_type,
+                    direction=_direction(txn_type),
+                    execution_date=txn.transaction_date.strftime("%Y-%m-%d") if txn.transaction_date else None,
+                    disclosure_date=reference_date.strftime("%Y-%m-%d"),
+                    amount_low=float(amount_min) if amount_min is not None else None,
+                    amount_high=float(amount_max) if amount_max is not None else None,
+                    amount_estimate=((float(amount_min) + float(amount_max)) / 2.0) if amount_min is not None and amount_max is not None else None,
+                    currency="USD",
+                    units_low=None,
+                    units_high=None,
+                    price_low=None,
+                    price_high=None,
+                    quality_score=1.0,
+                    parse_confidence=1.0,
+                    resolution_event_id=resolution_event.event_id,
+                    resolution_confidence=resolution_event.resolution_confidence,
+                    resolution_method_version=RESOLUTION_METHOD_VERSION,
+                    include_in_signal=include,
+                    exclusion_reason_code=None if include else (ReasonCode.MISSING_TICKER.value if not resolution_event.ticker else ReasonCode.NON_SIGNAL_ASSET.value),
+                    exclusion_reason_detail=native_res.exclusion_reason,
+                    provenance_payload={
+                        "source_system": "direct-senate-html",
+                        "raw_record_id": source_record_id,
+                        "raw_filing_id": filing_id,
+                        "html_path": str(html_path),
+                        "amount_range": txn.amount_range,
+                        "comment": txn.comment,
+                        "resolver_evidence": resolution_event.evidence_payload,
+                        "native_resolution": {
+                            "method": native_res.resolution_method,
+                            "confidence": native_res.resolution_confidence,
+                            "include_in_signal": native_res.include_in_signal,
+                            "exclusion_reason": native_res.exclusion_reason,
+                        },
+                        "method_versions": {
+                            "normalization": NORMALIZATION_METHOD_VERSION,
+                            "resolution": RESOLUTION_METHOD_VERSION,
+                            "score": CONGRESS_SCORE_METHOD_VERSION,
+                        },
+                        "imported_at": utcnow_iso(),
+                    },
+                    normalization_method_version=NORMALIZATION_METHOD_VERSION,
+                    run_id=run.run_id,
+                )
+                normalized_rows.append(normalized)
 
-            scored = score_transaction(
-                member_id=ptr_id,
-                ticker=normalized.ticker,
-                transaction_type=txn_type,
-                execution_date=txn.transaction_date,
-                amount_min=amount_min,
-                amount_max=amount_max,
-                owner_type=_normalize_owner(txn.owner),
-                resolution_confidence=resolution_event.resolution_confidence,
-                signal_weight=1.0,
-                reference_date=reference_date,
+                if not include or not normalized.ticker:
+                    continue
+
+                scored = score_transaction(
+                    member_id=ptr_id,
+                    ticker=normalized.ticker,
+                    transaction_type=txn_type,
+                    execution_date=txn.transaction_date,
+                    amount_min=amount_min,
+                    amount_max=amount_max,
+                    owner_type=_normalize_owner(txn.owner),
+                    resolution_confidence=resolution_event.resolution_confidence,
+                    signal_weight=1.0,
+                    reference_date=reference_date,
+                )
+                subject_key = f"entity:{normalized.ticker.lower()}"
+                scored_by_subject[subject_key].append(scored)
+                record_ids_by_subject[subject_key].append(source_record_id)
+
+        for subject_key, scored_transactions in scored_by_subject.items():
+            aggregate = compute_aggregate(scored_transactions)
+            total = aggregate.volume_buy + aggregate.volume_sell
+            resolution_rate = 1.0 if aggregate.transactions_included else 0.0
+            confidence = compute_confidence_score(aggregate, resolution_rate)["composite_score"]
+            net_score = aggregate.volume_net / total if total else 0.0
+            ids = record_ids_by_subject[subject_key]
+            signal = compute_entity_signal(
+                subject_key=subject_key,
+                score=float(net_score),
+                confidence=float(confidence),
+                as_of_date=reference_date.strftime("%Y-%m-%d"),
+                lookback_window=window_days,
+                input_count=len(ids),
+                included_count=aggregate.transactions_included,
+                excluded_count=aggregate.transactions_excluded,
+                explanation=f"{aggregate.transactions_included} qualifying direct Senate transaction(s) across {aggregate.unique_members} member(s)",
+                method_version=CONGRESS_SCORE_METHOD_VERSION,
+                code_version=code_version,
+                run_id=run.run_id,
+                provenance_refs={
+                    "normalized_row_ids": ids,
+                    "resolution_event_ids": [
+                        resolution_events[item].event_id
+                        for item in ids
+                        if item in resolution_events
+                    ],
+                    "path": "direct_senate_html",
+                },
             )
-            subject_key = f"entity:{normalized.ticker.lower()}"
-            scored_by_subject[subject_key].append(scored)
-            record_ids_by_subject[subject_key].append(source_record_id)
+            results.append((signal, _fingerprint(ids, CONGRESS_SCORE_METHOD_VERSION, reference_date.strftime("%Y-%m-%d"), window_days)))
 
-    results: list[tuple[SignalResult, str]] = []
-    for subject_key, scored_transactions in scored_by_subject.items():
-        aggregate = compute_aggregate(scored_transactions)
-        total = aggregate.volume_buy + aggregate.volume_sell
-        resolution_rate = 1.0 if aggregate.transactions_included else 0.0
-        confidence = compute_confidence_score(aggregate, resolution_rate)["composite_score"]
-        net_score = aggregate.volume_net / total if total else 0.0
-        ids = record_ids_by_subject[subject_key]
-        signal = compute_entity_signal(
-            subject_key=subject_key,
-            score=float(net_score),
-            confidence=float(confidence),
-            as_of_date=reference_date.strftime("%Y-%m-%d"),
-            lookback_window=window_days,
-            input_count=len(ids),
-            included_count=aggregate.transactions_included,
-            excluded_count=aggregate.transactions_excluded,
-            explanation=f"{aggregate.transactions_included} qualifying direct Senate transaction(s) across {aggregate.unique_members} member(s)",
-            method_version=CONGRESS_SCORE_METHOD_VERSION,
-            code_version=code_version,
-            run_id=run.run_id,
-            provenance_refs={
-                "normalized_row_ids": ids,
-                "resolution_event_ids": [
-                    resolution_events[item].event_id
-                    for item in ids
-                    if item in resolution_events
-                ],
-                "path": "direct_senate_html",
-            },
-        )
-        results.append((signal, _fingerprint(ids, CONGRESS_SCORE_METHOD_VERSION, reference_date.strftime("%Y-%m-%d"), window_days)))
-
-    with get_connection(derived_db_path) as conn:
-        insert_run(conn, run)
-        for row in normalized_rows:
-            if row.resolution_event_id:
-                insert_resolution_event(conn, resolution_events[row.source_record_id])
-            insert_normalized(conn, row)
-        for signal, fingerprint in results:
-            insert_signal_result(conn, signal, fingerprint)
-        update_run_status(
-            conn,
-            run.run_id,
-            "SUCCEEDED",
-            utcnow_iso(),
-            {
-                "normalized_count": len(normalized_rows),
-                "score_count": len(results),
-                "html_count": len(html_files),
-                "skipped_count": skipped_count,
-            },
-        )
+        with get_connection(derived_db_path) as conn:
+            for row in normalized_rows:
+                if row.resolution_event_id:
+                    insert_resolution_event(conn, resolution_events[row.source_record_id])
+                insert_normalized(conn, row)
+            for signal, fingerprint in results:
+                insert_signal_result(conn, signal, fingerprint)
+            update_run_status(
+                conn,
+                run.run_id,
+                "SUCCEEDED",
+                utcnow_iso(),
+                {
+                    "normalized_count": len(normalized_rows),
+                    "score_count": len(results),
+                    "html_count": len(html_files),
+                    "skipped_count": skipped_count,
+                },
+            )
+    except Exception as exc:
+        with get_connection(derived_db_path) as conn:
+            update_run_status(
+                conn,
+                run.run_id,
+                "FAILED",
+                utcnow_iso(),
+                {
+                    "normalized_count": len(normalized_rows),
+                    "score_count": len(results),
+                    "html_count": len(html_files),
+                    "skipped_count": skipped_count,
+                    "error": str(exc),
+                },
+            )
+        raise
 
     return DirectSenateRunResult(
         run_id=run.run_id,

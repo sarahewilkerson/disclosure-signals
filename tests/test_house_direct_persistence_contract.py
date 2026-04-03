@@ -122,3 +122,41 @@ def test_house_direct_service_persists_run_rows_and_skip_reasons(tmp_path, monke
         ("treasury", "NON_SIGNAL_ASSET", 0),
     ]
     assert [row["subject_key"] for row in results] == ["entity:wmt"]
+
+
+def test_house_direct_service_persists_failed_run_rows(tmp_path, monkeypatch):
+    pdf_dir = tmp_path / "pdfs"
+    pdf_dir.mkdir()
+    (pdf_dir / "boom.pdf").write_bytes(b"%PDF-1.4 fake")
+
+    def fake_parse(repo_root, pdf_path):
+        del repo_root, pdf_path
+        raise RuntimeError("simulated parse failure")
+
+    monkeypatch.setattr("signals.congress.direct_service.parse_house_pdf_text_only", fake_parse)
+
+    db_path = tmp_path / "derived.db"
+    try:
+        run_direct_house_pdfs_into_derived(
+            repo_root=Path(__file__).resolve().parents[1],
+            derived_db_path=str(db_path),
+            pdf_dir=str(pdf_dir),
+            reference_date=datetime(2026, 4, 2),
+            window_days=90,
+            max_files=None,
+        )
+    except RuntimeError as exc:
+        assert str(exc) == "simulated parse failure"
+    else:
+        raise AssertionError("expected run_direct_house_pdfs_into_derived to raise")
+
+    with get_connection(str(db_path)) as conn:
+        run = conn.execute("select run_type, status, summary_json from runs").fetchone()
+        normalized_count = conn.execute("select count(*) as c from normalized_transactions").fetchone()["c"]
+        result_count = conn.execute("select count(*) as c from signal_results").fetchone()["c"]
+
+    assert run["run_type"] == "direct_house_score"
+    assert run["status"] == "FAILED"
+    assert "simulated parse failure" in run["summary_json"]
+    assert normalized_count == 0
+    assert result_count == 0
