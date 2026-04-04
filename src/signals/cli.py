@@ -838,6 +838,32 @@ def cmd_doctor(args):
     raise SystemExit(0 if overall else 2)
 
 
+def cmd_validate(args):
+    from signals.analysis.validation import run_transaction_validation, render_transaction_validation_markdown
+    forward_days = [int(d) for d in args.forward_days.split(",")] if args.forward_days else [5, 10, 20, 60]
+    report = run_transaction_validation(
+        db_path=args.db,
+        forward_days=forward_days,
+        source_filter=args.source or None,
+        min_date=args.min_date,
+        max_date=args.max_date,
+    )
+    if args.format == "json":
+        print(json.dumps(report, indent=2))
+    else:
+        print(render_transaction_validation_markdown(report))
+
+
+def cmd_brief(args):
+    from signals.analysis.daily_brief import build_daily_brief, render_daily_brief_markdown
+    reference_date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else datetime.now()
+    brief = build_daily_brief(args.db, reference_date=reference_date)
+    if args.format == "json":
+        print(json.dumps(brief, indent=2))
+    else:
+        print(render_daily_brief_markdown(brief))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="signals")
     parser.add_argument("--db", default=str(default_derived_db()))
@@ -1089,6 +1115,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     doctor = subparsers.add_parser("doctor", help="Run workspace health checks")
     doctor.set_defaults(func=cmd_doctor)
+
+    validate = subparsers.add_parser("validate", help="Run forward-return validation on persisted signals")
+    validate.add_argument("--source", choices=["insider", "congress"], default=None, help="Filter by source")
+    validate.add_argument("--min-date", default=None, help="Minimum execution date YYYY-MM-DD")
+    validate.add_argument("--max-date", default=None, help="Maximum execution date YYYY-MM-DD")
+    validate.add_argument("--forward-days", default=None, help="Comma-separated forward windows (default: 5,10,20,60)")
+    validate.set_defaults(func=cmd_validate)
+
+    brief = subparsers.add_parser("brief", help="Generate high-signal daily brief")
+    brief.add_argument("--date", default=None, help="Reference date YYYY-MM-DD (default: today)")
+    brief.set_defaults(func=cmd_brief)
+
     return parser
 
 
