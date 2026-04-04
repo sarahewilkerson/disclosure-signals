@@ -225,3 +225,94 @@ def test_strength_tier_classification():
     assert _classify_strength(0.8, 0.2, 0.5) == "weak"
     # Edge: high confidence but low score magnitude → moderate (not strong)
     assert _classify_strength(0.8, 0.8, 0.2) == "moderate"
+
+
+def test_daily_brief_structure():
+    """Daily brief should produce all expected sections from an in-memory DB."""
+    import sqlite3
+    import tempfile
+    from signals.core.derived_db import init_db, get_connection, insert_normalized, insert_signal_result, insert_run
+    from signals.core.dto import NormalizedTransaction, SignalResult
+    from signals.core.runs import make_run
+
+    with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
+        db_path = tmp.name
+        init_db(db_path)
+        run = make_run("test", "insider", "test", {}, {})
+        with get_connection(db_path) as conn:
+            insert_run(conn, run)
+            # Insert 2 insider BUY transactions for the same ticker from different actors
+            for i, actor in enumerate(["CEO Alpha", "CFO Beta"], start=1):
+                insert_normalized(conn, NormalizedTransaction(
+                    source="insider", source_record_id=f"test:{i}", source_filing_id="f1",
+                    actor_id=f"cik-{i}", actor_name=actor, actor_type="ceo",
+                    owner_type="direct", entity_key="entity:test", instrument_key=None,
+                    ticker="TEST", issuer_name="Test Corp", instrument_type="ST",
+                    transaction_type="open_market_buy", direction="BUY",
+                    execution_date="2026-04-01", disclosure_date="2026-04-02",
+                    amount_low=50000.0, amount_high=50000.0, amount_estimate=50000.0,
+                    currency="USD", units_low=100.0, units_high=100.0,
+                    price_low=500.0, price_high=500.0,
+                    quality_score=1.0, parse_confidence=1.0,
+                    resolution_event_id=None, resolution_confidence=0.99,
+                    resolution_method_version="test",
+                    include_in_signal=True, exclusion_reason_code=None,
+                    exclusion_reason_detail=None,
+                    provenance_payload={}, normalization_method_version="test",
+                    run_id=run.run_id,
+                ))
+            # Insert a bullish signal
+            insert_signal_result(conn, SignalResult(
+                source="insider", scope="entity", subject_key="entity:test",
+                score=0.7, label="bullish", confidence=0.8,
+                as_of_date="2026-04-04", lookback_window=30,
+                input_count=2, included_count=2, excluded_count=0,
+                explanation="test", method_version="test", code_version="test",
+                run_id=run.run_id, provenance_refs={},
+            ), "fp-test")
+
+        from signals.analysis.daily_brief import build_daily_brief
+        brief = build_daily_brief(db_path, reference_date=datetime(2026, 4, 4))
+
+        assert brief["as_of_date"] == "2026-04-04"
+        assert "cluster_buy_alerts" in brief
+        assert "strong_insider_buys" in brief
+        assert "cross_source_signals" in brief
+        assert "stats" in brief
+        # Should find the cluster buy (2 unique buyers for TEST)
+        assert len(brief["cluster_buy_alerts"]) == 1
+        assert brief["cluster_buy_alerts"][0]["ticker"] == "TEST"
+        assert brief["cluster_buy_alerts"][0]["unique_buyers"] == 2
+        # Should find the strong insider buy
+        assert len(brief["strong_insider_buys"]) == 1
+        assert brief["strong_insider_buys"][0]["ticker"] == "TEST"
+
+
+def test_daily_brief_filters_sells():
+    """Daily brief should not include sell-driven signals."""
+    import tempfile
+    from signals.core.derived_db import init_db, get_connection, insert_signal_result, insert_run
+    from signals.core.dto import SignalResult
+    from signals.core.runs import make_run
+
+    with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
+        db_path = tmp.name
+        init_db(db_path)
+        run = make_run("test", "insider", "test", {}, {})
+        with get_connection(db_path) as conn:
+            insert_run(conn, run)
+            # Insert a bearish signal — should NOT appear in brief
+            insert_signal_result(conn, SignalResult(
+                source="insider", scope="entity", subject_key="entity:sell",
+                score=-0.5, label="bearish", confidence=0.8,
+                as_of_date="2026-04-04", lookback_window=90,
+                input_count=5, included_count=5, excluded_count=0,
+                explanation="test", method_version="test", code_version="test",
+                run_id=run.run_id, provenance_refs={},
+            ), "fp-sell")
+
+        from signals.analysis.daily_brief import build_daily_brief
+        brief = build_daily_brief(db_path)
+
+        assert len(brief["strong_insider_buys"]) == 0
+        assert len(brief["cluster_buy_alerts"]) == 0
