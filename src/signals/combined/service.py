@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from signals.combined.overlay import build_overlay, fingerprint_for_combined
 from signals.core.derived_db import (
@@ -68,6 +71,10 @@ def build_from_derived(repo_root: Path, derived_db_path: str, lookback_window: i
         congress_rows = fetch_signal_results_by_source(conn, "congress")
         insider_results = _typed_signal_rows(insider_rows, lookback_window)
         congress_results = _typed_signal_rows(congress_rows, lookback_window)
+        if not insider_results:
+            logger.warning("No insider signal results found — overlay will produce no combined results")
+        if not congress_results:
+            logger.warning("No congress signal results found — overlay will produce no combined results")
         resolution_event_ids = []
         for row in insider_results + congress_results:
             resolution_event_ids.extend(row.provenance_refs.get("resolution_event_ids", []))
