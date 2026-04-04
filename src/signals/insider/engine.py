@@ -32,7 +32,7 @@ FORMER_OFFICER_PATTERNS = [r"\bformer\b", r"\bex-", r"\bfmr\b", r"\bretired\b", 
 PLANNED_TRADE_KEYWORDS = ["10b5-1", "10b-5-1", "rule 10b5", "rule 10b-5", "trading plan", "pre-arranged", "pre-established"]
 
 DIRECTION_WEIGHT_BUY = 1.0
-DIRECTION_WEIGHT_SELL = -0.5
+DIRECTION_WEIGHT_SELL = -0.15
 ROLE_WEIGHT = {"ceo": 1.0, "cfo": 0.95, "chair": 0.9, "president": 0.85, "coo": 0.8, "officer_other": 0.5}
 PLANNED_TRADE_DISCOUNT = 0.05
 DIRECT_OWNERSHIP_WEIGHT = 1.0
