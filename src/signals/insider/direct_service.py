@@ -89,7 +89,7 @@ def run_direct_xml_into_derived(repo_root: Path, derived_db_path: str, xml_dir: 
                     source="insider",
                     source_record_id=source_record_id,
                     source_filing_id=filing_id,
-                    ticker=None,
+                    ticker=filing.get("ticker_issuer"),
                     cik=filing.get("cik_issuer"),
                     issuer_name=filing.get("issuer_name"),
                     instrument_type=txn.get("security_title"),
