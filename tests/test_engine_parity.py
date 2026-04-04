@@ -357,3 +357,45 @@ def test_daily_brief_anomaly_detection():
         assert len(brief["anomaly_alerts"]) == 1
         assert brief["anomaly_alerts"][0]["ticker"] == "ANOMTEST"
         assert brief["anomaly_alerts"][0]["alert_type"] == "first_buy_in_period"
+
+
+def test_sector_cache_logic(monkeypatch, tmp_path):
+    """Sector cache should store and retrieve without re-fetching."""
+    import signals.analysis.sectors as sectors_mod
+
+    # Mock yfinance
+    call_count = {"n": 0}
+    class FakeTicker:
+        def __init__(self, ticker):
+            call_count["n"] += 1
+            self.info = {"sector": "Technology", "industry": "Software"}
+
+    monkeypatch.setattr(sectors_mod, "HAS_YFINANCE", True)
+    monkeypatch.setattr(sectors_mod.yf, "Ticker", FakeTicker)
+    monkeypatch.setattr(sectors_mod, "_CACHE_DB", tmp_path / "test_cache.db")
+
+    # First call: fetches from yfinance
+    result1 = sectors_mod.get_sector_map(["AAPL"])
+    assert result1["AAPL"]["sector"] == "Technology"
+    assert call_count["n"] == 1
+
+    # Second call: should use cache, not re-fetch
+    result2 = sectors_mod.get_sector_map(["AAPL"])
+    assert result2["AAPL"]["sector"] == "Technology"
+    assert call_count["n"] == 1  # no new yfinance call
+
+
+def test_baseline_comparison_no_yfinance(monkeypatch):
+    """Baseline comparison should return error when yfinance unavailable."""
+    import signals.analysis.validation as val_mod
+    monkeypatch.setattr(val_mod, "HAS_YFINANCE", False)
+    result = val_mod.run_baseline_comparison("/nonexistent.db")
+    assert "error" in result
+
+
+def test_regime_analysis_no_yfinance(monkeypatch):
+    """Regime analysis should return error when yfinance unavailable."""
+    import signals.analysis.validation as val_mod
+    monkeypatch.setattr(val_mod, "HAS_YFINANCE", False)
+    result = val_mod.run_regime_analysis("/nonexistent.db")
+    assert "error" in result

@@ -839,7 +839,11 @@ def cmd_doctor(args):
 
 
 def cmd_validate(args):
-    from signals.analysis.validation import run_transaction_validation, render_transaction_validation_markdown
+    from signals.analysis.validation import (
+        run_transaction_validation, render_transaction_validation_markdown,
+        run_baseline_comparison, render_baseline_comparison_markdown,
+        run_regime_analysis, render_regime_analysis_markdown,
+    )
     forward_days = [int(d) for d in args.forward_days.split(",")] if args.forward_days else [5, 10, 20, 60]
     report = run_transaction_validation(
         db_path=args.db,
@@ -849,15 +853,26 @@ def cmd_validate(args):
         max_date=args.max_date,
     )
     if args.format == "json":
-        print(json.dumps(report, indent=2))
+        payload = {"transaction_validation": report}
+        if args.baseline:
+            payload["baseline_comparison"] = run_baseline_comparison(args.db, forward_days, args.min_date, args.max_date)
+        if args.regime:
+            payload["regime_analysis"] = run_regime_analysis(args.db, forward_days, args.min_date, args.max_date)
+        print(json.dumps(payload, indent=2))
     else:
         print(render_transaction_validation_markdown(report))
+        if args.baseline:
+            print()
+            print(render_baseline_comparison_markdown(run_baseline_comparison(args.db, forward_days, args.min_date, args.max_date)))
+        if args.regime:
+            print()
+            print(render_regime_analysis_markdown(run_regime_analysis(args.db, forward_days, args.min_date, args.max_date)))
 
 
 def cmd_brief(args):
     from signals.analysis.daily_brief import build_daily_brief, render_daily_brief_markdown
     reference_date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else datetime.now()
-    brief = build_daily_brief(args.db, reference_date=reference_date)
+    brief = build_daily_brief(args.db, reference_date=reference_date, include_sectors=args.sectors)
     if args.format == "json":
         print(json.dumps(brief, indent=2))
     else:
@@ -1121,10 +1136,13 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--min-date", default=None, help="Minimum execution date YYYY-MM-DD")
     validate.add_argument("--max-date", default=None, help="Maximum execution date YYYY-MM-DD")
     validate.add_argument("--forward-days", default=None, help="Comma-separated forward windows (default: 5,10,20,60)")
+    validate.add_argument("--baseline", action="store_true", help="Include trivial baseline comparison")
+    validate.add_argument("--regime", action="store_true", help="Include market regime analysis")
     validate.set_defaults(func=cmd_validate)
 
     brief = subparsers.add_parser("brief", help="Generate high-signal daily brief")
     brief.add_argument("--date", default=None, help="Reference date YYYY-MM-DD (default: today)")
+    brief.add_argument("--sectors", action="store_true", help="Include sector summary (requires yfinance)")
     brief.set_defaults(func=cmd_brief)
 
     return parser

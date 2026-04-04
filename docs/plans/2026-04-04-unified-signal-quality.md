@@ -207,7 +207,7 @@ No downstream consumers outside this repo. Changes are isolated to scoring const
 ### Process Notes
 - Units 2-3 executed without separate plan documents (plan said "will get their own plans" but user authorized direct continuation)
 - 3 test fixture failures discovered during 2a implementation (test data used lowest bracket, now excluded)
-- `MINIMUM_CONGRESS_TRADE_AMOUNT` duplicated in 2 files — tracked for future deduplication
+- `MINIMUM_CONGRESS_TRADE_AMOUNT` — resolved: deduplicated to constants.py in Unit 5c
 
 ## Units 2-3 Sync Verification
 - [x] Verification strategy executed: PASS (76/77 tests, 1 pre-existing)

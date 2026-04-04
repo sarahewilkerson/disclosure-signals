@@ -73,6 +73,7 @@ def build_daily_brief(
     min_confidence: float = 0.4,
     cluster_threshold: int = 2,
     lookback_days: int = 30,
+    include_sectors: bool = False,
 ) -> dict:
     """Build a high-signal daily brief from the derived database.
 
@@ -82,6 +83,7 @@ def build_daily_brief(
         min_confidence: Minimum confidence for signal inclusion.
         cluster_threshold: Minimum unique buyers for cluster alert.
         lookback_days: Days back to search for cluster buying.
+        include_sectors: Fetch sector data and include sector summary.
     """
     if reference_date is None:
         reference_date = datetime.now()
@@ -117,7 +119,36 @@ def build_daily_brief(
         "cross_source_signals": [_cross_to_dict(c) for c in cross_source],
         "anomaly_alerts": [_anomaly_to_dict(a) for a in anomalies],
         "stats": stats,
+        "sector_summary": _build_sector_summary(
+            db_path, strong_insider, strong_congress, cross_source, cluster_alerts
+        ) if include_sectors else None,
     }
+
+
+def _build_sector_summary(
+    db_path: str,
+    strong_insider: list,
+    strong_congress: list,
+    cross_source: list,
+    cluster_alerts: list,
+) -> dict | None:
+    try:
+        from signals.analysis.sectors import get_sector_map, build_sector_summary
+        tickers = set()
+        for s in strong_insider:
+            tickers.add(s.ticker)
+        for s in strong_congress:
+            tickers.add(s.ticker)
+        for c in cross_source:
+            tickers.add(c.ticker)
+        for a in cluster_alerts:
+            tickers.add(a.ticker)
+        if not tickers:
+            return None
+        sector_map = get_sector_map(list(tickers))
+        return build_sector_summary(db_path, sector_map)
+    except ImportError:
+        return None
 
 
 def _find_cluster_buys(
@@ -457,6 +488,17 @@ def render_daily_brief_markdown(brief: dict) -> str:
                     f"- **{a['ticker']}**: Elevated activity — "
                     f"{a['current_buys']} buys vs {a['historical_monthly_avg']:.1f}/month historical avg"
                 )
+        lines.append("")
+
+    # Sector summary
+    sector_summary = brief.get("sector_summary")
+    if sector_summary:
+        lines.extend(["## Sector Summary", ""])
+        lines.append("| Sector | Bullish | Bearish | Net | Top Tickers |")
+        lines.append("|--------|---------|---------|-----|-------------|")
+        for sector, data in sorted(sector_summary.items(), key=lambda x: abs(x[1]["net_sentiment"]), reverse=True):
+            top = ", ".join(data["top_tickers"][:3])
+            lines.append(f"| {sector} | {data['bullish_count']} | {data['bearish_count']} | {data['net_sentiment']:+d} | {top} |")
         lines.append("")
 
     if not alerts and not cross and not insider and not congress and not anomalies:
