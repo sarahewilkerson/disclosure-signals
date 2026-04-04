@@ -240,6 +240,7 @@ def run_direct_house_pdfs_into_derived(
                     resolution_confidence=resolution_event.resolution_confidence,
                     signal_weight=1.0,
                     reference_date=reference_date,
+                    disclosure_date=txn.notification_date,
                 )
                 subject_key = f"entity:{normalized.ticker.lower()}"
                 scored_by_subject[subject_key].append(scored)

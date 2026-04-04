@@ -388,6 +388,7 @@ def run_direct_senate_html_into_derived(
                     resolution_confidence=resolution_event.resolution_confidence,
                     signal_weight=1.0,
                     reference_date=reference_date,
+                    disclosure_date=reference_date,
                 )
                 subject_key = f"entity:{normalized.ticker.lower()}"
                 scored_by_subject[subject_key].append(scored)
