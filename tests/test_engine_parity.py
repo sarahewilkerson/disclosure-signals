@@ -116,6 +116,13 @@ def test_single_transaction_returns_insufficient():
     assert result["confidence"] == 0.0
 
 
+def test_managed_account_zero_weight():
+    """Managed account trades should have zero weight (member not making decisions)."""
+    assert direct_congress_engine.get_owner_weight("managed") == 0.0
+    assert direct_congress_engine.get_owner_weight("self") == 1.0
+    assert direct_congress_engine.get_owner_weight("spouse") == 0.8
+
+
 def test_congress_single_txn_insufficient():
     """Congress label_from_score with single transaction should return 'insufficient'."""
     assert direct_congress_engine.label_from_score(0.5, 0.8, transaction_count=1) == "insufficient"

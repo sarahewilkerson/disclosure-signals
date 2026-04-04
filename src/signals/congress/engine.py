@@ -12,7 +12,7 @@ _DEFAULT_OWNER_WEIGHTS = {
     "spouse": 0.8,
     "joint": 0.9,
     "dependent": 0.5,
-    "managed": 0.3,
+    "managed": 0.0,
 }
 
 
