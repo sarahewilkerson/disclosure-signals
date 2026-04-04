@@ -38,8 +38,8 @@ def test_house_direct_service_persists_run_rows_and_skip_reasons(tmp_path, monke
                         transaction_type="purchase",
                         transaction_date=datetime(2026, 3, 1),
                         notification_date=datetime(2026, 3, 2),
-                        amount_min=1001,
-                        amount_max=15000,
+                        amount_min=15001,
+                        amount_max=50000,
                         page_number=1,
                         raw_line="Walmart Inc CMN x 03/01/26 03/02/26 x",
                     )

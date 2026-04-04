@@ -34,6 +34,8 @@ from signals.core.versioning import (
     RESOLUTION_METHOD_VERSION,
 )
 
+MINIMUM_CONGRESS_TRADE_AMOUNT = 15_000
+
 
 @dataclass
 class DirectCongressRunResult:
@@ -148,7 +150,10 @@ def run_direct_house_pdfs_into_derived(
                     and bool(resolution_event.ticker)
                     and txn.transaction_type in {"purchase", "sale", "sale_partial"}
                 )
-                if include:
+                if include and txn.amount_max is not None and txn.amount_max <= MINIMUM_CONGRESS_TRADE_AMOUNT:
+                    include = False
+                    exclusion_reason_code = ReasonCode.BELOW_MINIMUM_VALUE.value
+                elif include:
                     exclusion_reason_code = None
                 elif not asset_resolution.include_in_signal:
                     exclusion_reason_code = ReasonCode.NON_SIGNAL_ASSET.value

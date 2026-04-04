@@ -38,6 +38,8 @@ from signals.core.versioning import (
     RESOLUTION_METHOD_VERSION,
 )
 
+MINIMUM_CONGRESS_TRADE_AMOUNT = 15_000
+
 
 @dataclass
 class DirectSenateIngestResult:
@@ -302,7 +304,10 @@ def run_direct_senate_html_into_derived(
                 txn_type = _normalize_txn_type(txn.transaction_type)
                 amount_min, amount_max = _parse_amount_range(repo_root, txn.amount_range)
                 include = bool(native_res.include_in_signal and resolution_event.ticker and txn_type in {"purchase", "sale", "sale_partial"})
-                if include:
+                if include and amount_max is not None and amount_max <= MINIMUM_CONGRESS_TRADE_AMOUNT:
+                    include = False
+                    exclusion_reason_code = ReasonCode.BELOW_MINIMUM_VALUE.value
+                elif include:
                     exclusion_reason_code = None
                 elif not native_res.include_in_signal:
                     exclusion_reason_code = ReasonCode.NON_SIGNAL_ASSET.value

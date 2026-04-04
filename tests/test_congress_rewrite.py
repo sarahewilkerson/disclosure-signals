@@ -27,10 +27,10 @@ def test_direct_house_rewrite_persists_rows(tmp_path, monkeypatch):
                 transaction_type="purchase",
                 transaction_date=datetime(2026, 3, 1),
                 notification_date=datetime(2026, 3, 2),
-                amount_min=1001,
-                amount_max=15000,
+                amount_min=15001,
+                amount_max=50000,
                 page_number=1,
-                raw_line="Apple Inc. - Common Stock (AAPL) P 03/01/2026 03/02/2026 $1,001 - $15,000",
+                raw_line="Apple Inc. - Common Stock (AAPL) P 03/01/2026 03/02/2026 $15,001 - $50,000",
             )
         ],
         parse_errors=[],

@@ -52,7 +52,7 @@ def test_direct_senate_score_persists_rows(monkeypatch, tmp_path):
             self.asset_name = "Apple Inc."
             self.asset_type = "Stock"
             self.transaction_type = "Purchase"
-            self.amount_range = "$1,001 - $15,000"
+            self.amount_range = "$15,001 - $50,000"
             self.comment = None
 
     class FakeConnector:
@@ -93,7 +93,7 @@ def test_direct_senate_non_signal_assets_are_not_marked_missing_ticker(monkeypat
             self.asset_name = "GS Managed Structured Note Strategy S&P 500 Linked Note"
             self.asset_type = None
             self.transaction_type = "Purchase"
-            self.amount_range = "$1,001 - $15,000"
+            self.amount_range = "$15,001 - $50,000"
             self.comment = None
 
     class FakeConnector:

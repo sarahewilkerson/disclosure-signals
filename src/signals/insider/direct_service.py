@@ -32,6 +32,8 @@ from signals.insider.engine import (
 )
 from signals.insider.parser import parse_form4_xml
 
+MINIMUM_INSIDER_TRADE_VALUE = 10_000
+
 
 @dataclass
 class DirectInsiderRunResult:
@@ -105,6 +107,12 @@ def run_direct_xml_into_derived(repo_root: Path, derived_db_path: str, xml_dir: 
                     bool(filing.get("is_other")),
                 )
                 include = exclusion is None and txn.get("transaction_code") in {"P", "S"}
+                exclusion_reason_code = ReasonCode.ENTITY_ROLE_EXCLUDED.value if exclusion else None
+                total_value = txn.get("total_value")
+                if include and (total_value is None or total_value < MINIMUM_INSIDER_TRADE_VALUE):
+                    include = False
+                    exclusion = f"total_value={total_value} below minimum {MINIMUM_INSIDER_TRADE_VALUE}"
+                    exclusion_reason_code = ReasonCode.BELOW_MINIMUM_VALUE.value
                 normalized = NormalizedTransaction(
                     source="insider",
                     source_record_id=source_record_id,
@@ -136,7 +144,7 @@ def run_direct_xml_into_derived(repo_root: Path, derived_db_path: str, xml_dir: 
                     resolution_confidence=resolution_event.resolution_confidence,
                     resolution_method_version=RESOLUTION_METHOD_VERSION,
                     include_in_signal=include,
-                    exclusion_reason_code=None if include else ReasonCode.ENTITY_ROLE_EXCLUDED.value,
+                    exclusion_reason_code=None if include else exclusion_reason_code,
                     exclusion_reason_detail=exclusion,
                     provenance_payload={
                         "source_system": "direct-insider-xml",
