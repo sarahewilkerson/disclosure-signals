@@ -7,11 +7,11 @@
     },
     "congress:entity:aapl": {
       "label": "bullish",
-      "score": 3836.1701604595173
+      "score": 2685.319112321662
     },
     "congress:entity:msft": {
       "label": "bearish",
-      "score": -21690.53625893099
+      "score": -15183.375381251693
     }
   },
   "combined_summary": {

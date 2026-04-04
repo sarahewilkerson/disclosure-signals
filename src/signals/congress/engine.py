@@ -74,6 +74,19 @@ def staleness_penalty(execution_date: datetime | None, reference_date: datetime)
     return 0.2
 
 
+def disclosure_lag_penalty(execution_date: datetime | None, disclosure_date: datetime | None) -> float:
+    if execution_date is None or disclosure_date is None:
+        return 0.7
+    lag_days = (disclosure_date - execution_date).days
+    if lag_days <= 30:
+        return 1.0
+    if lag_days <= 60:
+        return 0.85
+    if lag_days <= 120:
+        return 0.6
+    return 0.3
+
+
 def estimate_amount(amount_min: int | None, amount_max: int | None, method: str = "geometric_mean") -> float:
     if amount_min is None or amount_max is None or amount_min <= 0 or amount_max <= 0:
         return 0.0
@@ -100,6 +113,7 @@ def score_transaction(
     resolution_confidence: float,
     signal_weight: float,
     reference_date: datetime,
+    disclosure_date: datetime | None = None,
     amount_method: str = "geometric_mean",
     use_log_scaling: bool = False,
 ) -> ScoredTransaction:
@@ -114,8 +128,9 @@ def score_transaction(
         direction = 0.0
     stale = staleness_penalty(execution_date, reference_date)
     owner_weight = get_owner_weight(owner_type)
+    lag_penalty = disclosure_lag_penalty(execution_date, disclosure_date)
     raw_score = base_value * direction * stale * owner_weight
-    final_score = raw_score * resolution_confidence * signal_weight
+    final_score = raw_score * resolution_confidence * signal_weight * lag_penalty
     return ScoredTransaction(
         member_id=member_id,
         ticker=ticker,

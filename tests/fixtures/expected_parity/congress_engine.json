@@ -14,7 +14,7 @@
     "resolution_confidence": 1.0,
     "signal_weight": 1.0,
     "raw_score": 27387.040730973473,
-    "final_score": 27387.040730973473
+    "final_score": 19170.928511681428
   },
   "aggregate": {
     "breadth_pct": 1.0,
@@ -22,8 +22,8 @@
     "buyers": 1,
     "sellers": 0,
     "neutral": 0,
-    "volume_net": 1369.3520365486738,
-    "volume_buy": 1369.3520365486738,
+    "volume_net": 958.5464255840715,
+    "volume_buy": 958.5464255840715,
     "volume_sell": 0,
     "concentration_top5": 1.0,
     "is_concentrated": true,
