@@ -34,6 +34,16 @@ class ClusterBuyAlert:
 
 
 @dataclass
+class AnomalyAlert:
+    ticker: str
+    alert_type: str  # "first_buy_in_period" or "elevated_activity"
+    current_buys: int
+    historical_monthly_avg: float
+    months_since_last_buy: int | None
+    actors: list[str]
+
+
+@dataclass
 class StrongSignal:
     ticker: str
     source: str
@@ -91,7 +101,10 @@ def build_daily_brief(
     # 3. Cross-source signals from combined results
     cross_source = _find_cross_source(conn)
 
-    # 4. Summary stats
+    # 4. Anomaly detection: first-time buying or elevated activity
+    anomalies = _find_anomalous_activity(conn, reference_date, lookback_days)
+
+    # 5. Summary stats
     stats = _build_stats(conn)
 
     conn.close()
@@ -102,6 +115,7 @@ def build_daily_brief(
         "strong_insider_buys": [_signal_to_dict(s) for s in strong_insider],
         "strong_congress_buys": [_signal_to_dict(s) for s in strong_congress],
         "cross_source_signals": [_cross_to_dict(c) for c in cross_source],
+        "anomaly_alerts": [_anomaly_to_dict(a) for a in anomalies],
         "stats": stats,
     }
 
@@ -226,6 +240,97 @@ def _find_cross_source(conn: sqlite3.Connection) -> list[CrossSourceSignal]:
     ]
 
 
+def _find_anomalous_activity(
+    conn: sqlite3.Connection,
+    reference_date: datetime,
+    recent_days: int = 30,
+    history_months: int = 12,
+) -> list[AnomalyAlert]:
+    """Detect unusual insider buying — first-time buys or elevated activity."""
+    cutoff = reference_date.strftime("%Y-%m-%d")
+    from datetime import timedelta
+    recent_start = (reference_date - timedelta(days=recent_days)).strftime("%Y-%m-%d")
+    history_start = (reference_date - timedelta(days=history_months * 30)).strftime("%Y-%m-%d")
+
+    # Recent buys
+    recent_rows = conn.execute(
+        """
+        SELECT ticker, actor_name, execution_date
+        FROM normalized_transactions
+        WHERE source = 'insider' AND include_in_signal = 1 AND direction = 'BUY'
+          AND ticker IS NOT NULL AND execution_date >= ? AND execution_date <= ?
+        """,
+        (recent_start, cutoff),
+    ).fetchall()
+
+    if not recent_rows:
+        return []
+
+    recent_by_ticker: dict[str, list[dict]] = defaultdict(list)
+    for row in recent_rows:
+        recent_by_ticker[row["ticker"]].append(dict(row))
+
+    # Historical buys (before the recent window)
+    history_rows = conn.execute(
+        """
+        SELECT ticker, execution_date
+        FROM normalized_transactions
+        WHERE source = 'insider' AND include_in_signal = 1 AND direction = 'BUY'
+          AND ticker IS NOT NULL AND execution_date >= ? AND execution_date < ?
+        """,
+        (history_start, recent_start),
+    ).fetchall()
+
+    history_by_ticker: dict[str, list[str]] = defaultdict(list)
+    for row in history_rows:
+        history_by_ticker[row["ticker"]].append(row["execution_date"])
+
+    alerts = []
+    for ticker, recent_txns in sorted(recent_by_ticker.items()):
+        history = history_by_ticker.get(ticker, [])
+        historical_count = len(history)
+        monthly_avg = historical_count / max(1, history_months)
+        current_count = len(recent_txns)
+        actors = sorted({t["actor_name"] for t in recent_txns if t["actor_name"]})
+
+        if historical_count == 0:
+            # First buy in the history period
+            alerts.append(AnomalyAlert(
+                ticker=ticker.upper(),
+                alert_type="first_buy_in_period",
+                current_buys=current_count,
+                historical_monthly_avg=0.0,
+                months_since_last_buy=None,
+                actors=actors,
+            ))
+        elif monthly_avg > 0 and current_count > 2 * monthly_avg * (recent_days / 30):
+            # Elevated activity: current > 2x expected
+            last_date = max(history) if history else None
+            months_since = None
+            if last_date:
+                try:
+                    last_dt = datetime.strptime(last_date, "%Y-%m-%d")
+                    months_since = max(0, int((reference_date - last_dt).days / 30))
+                except (ValueError, TypeError):
+                    pass
+            alerts.append(AnomalyAlert(
+                ticker=ticker.upper(),
+                alert_type="elevated_activity",
+                current_buys=current_count,
+                historical_monthly_avg=round(monthly_avg, 2),
+                months_since_last_buy=months_since,
+                actors=actors,
+            ))
+
+    alerts.sort(key=lambda a: a.current_buys, reverse=True)
+    return alerts
+
+
+def _anomaly_to_dict(a: AnomalyAlert) -> dict:
+    from dataclasses import asdict
+    return asdict(a)
+
+
 def _build_stats(conn: sqlite3.Connection) -> dict:
     """Summary statistics for the brief."""
     insider_count = conn.execute(
@@ -337,7 +442,24 @@ def render_daily_brief_markdown(brief: dict) -> str:
             )
         lines.append("")
 
-    if not alerts and not cross and not insider and not congress:
+    # Anomaly alerts
+    anomalies = brief.get("anomaly_alerts", [])
+    if anomalies:
+        lines.extend(["## Anomaly Alerts", "", "Unusual insider buying activity relative to historical baseline.", ""])
+        for a in anomalies:
+            if a["alert_type"] == "first_buy_in_period":
+                lines.append(
+                    f"- **{a['ticker']}**: First insider buy in 12+ months — "
+                    f"{a['current_buys']} transaction(s) by {', '.join(a['actors'][:3])}"
+                )
+            else:
+                lines.append(
+                    f"- **{a['ticker']}**: Elevated activity — "
+                    f"{a['current_buys']} buys vs {a['historical_monthly_avg']:.1f}/month historical avg"
+                )
+        lines.append("")
+
+    if not alerts and not cross and not insider and not congress and not anomalies:
         lines.append("*No high-signal events detected.*")
 
     return "\n".join(lines) + "\n"

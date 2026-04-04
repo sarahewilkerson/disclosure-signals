@@ -316,3 +316,44 @@ def test_daily_brief_filters_sells():
 
         assert len(brief["strong_insider_buys"]) == 0
         assert len(brief["cluster_buy_alerts"]) == 0
+
+
+def test_daily_brief_anomaly_detection():
+    """Anomaly detection should flag first-time insider buying."""
+    import tempfile
+    from signals.core.derived_db import init_db, get_connection, insert_normalized, insert_run
+    from signals.core.dto import NormalizedTransaction
+    from signals.core.runs import make_run
+
+    with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
+        db_path = tmp.name
+        init_db(db_path)
+        run = make_run("test", "insider", "test", {}, {})
+        with get_connection(db_path) as conn:
+            insert_run(conn, run)
+            # Insert one recent buy with NO historical buys
+            insert_normalized(conn, NormalizedTransaction(
+                source="insider", source_record_id="anomaly:1", source_filing_id="f1",
+                actor_id="cik-1", actor_name="CEO Anomaly", actor_type="ceo",
+                owner_type="direct", entity_key="entity:anomtest", instrument_key=None,
+                ticker="ANOMTEST", issuer_name="Anomaly Corp", instrument_type="ST",
+                transaction_type="open_market_buy", direction="BUY",
+                execution_date="2026-04-01", disclosure_date="2026-04-02",
+                amount_low=50000.0, amount_high=50000.0, amount_estimate=50000.0,
+                currency="USD", units_low=100.0, units_high=100.0,
+                price_low=500.0, price_high=500.0,
+                quality_score=1.0, parse_confidence=1.0,
+                resolution_event_id=None, resolution_confidence=0.99,
+                resolution_method_version="test",
+                include_in_signal=True, exclusion_reason_code=None,
+                exclusion_reason_detail=None,
+                provenance_payload={}, normalization_method_version="test",
+                run_id=run.run_id,
+            ))
+
+        from signals.analysis.daily_brief import build_daily_brief
+        brief = build_daily_brief(db_path, reference_date=datetime(2026, 4, 4))
+
+        assert len(brief["anomaly_alerts"]) == 1
+        assert brief["anomaly_alerts"][0]["ticker"] == "ANOMTEST"
+        assert brief["anomaly_alerts"][0]["alert_type"] == "first_buy_in_period"
