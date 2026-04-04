@@ -179,3 +179,42 @@ No downstream consumers outside this repo. Changes are isolated to scoring const
 - [x] Production deploy: SKIPPED (no deploy command configured)
 - [x] Local, remote, and main are consistent: YES
 - Verified at: 2026-04-04
+
+---
+
+## Units 2-3 Execution Results
+
+**Executed:** 2026-04-04
+**Branch:** `feat/noise-reduction-and-overlay-hardening`
+**Commits:** 5 (3 scoring changes + 1 overlay hardening + 1 version bump)
+
+### Unit 2 Results
+- **2a:** Minimum trade value thresholds implemented. Insider: $10K floor. Congress: $1,001-$15,000 bracket excluded. `BELOW_MINIMUM_VALUE` ReasonCode added.
+- **2b:** Disclosure lag penalty function added. Default 0.7 when disclosure_date unknown. Integrated into `score_transaction` via optional parameter.
+- **2c:** Staleness step function replaced with 60-day half-life exponential decay. Eliminates cliffs at day boundaries.
+
+### Unit 3 Results
+- **3a:** Pre-flight completeness warning added to `build_from_derived()`.
+- **3b:** Deferred (overlap sparse, would further reduce combined results).
+- **3c:** Deferred (low priority for this cycle).
+
+### Tests Added (remediation)
+- `test_disclosure_lag_penalty` — 7 assertions covering all lag brackets + None handling
+- `test_minimum_trade_value_insider_exclusion` — verifies constant value
+- `test_minimum_trade_value_congress_exclusion` — verifies both house and senate constants
+- `test_staleness_continuous_decay` — verifies monotonic decrease with no cliffs over 365 days
+
+### Process Notes
+- Units 2-3 executed without separate plan documents (plan said "will get their own plans" but user authorized direct continuation)
+- 3 test fixture failures discovered during 2a implementation (test data used lowest bracket, now excluded)
+- `MINIMUM_CONGRESS_TRADE_AMOUNT` duplicated in 2 files — tracked for future deduplication
+
+## Units 2-3 Sync Verification
+- [x] Verification strategy executed: PASS (76/77 tests, 1 pre-existing)
+- [x] Branch pushed to remote: YES
+- [x] Branch merged to main: YES (fast-forward)
+- [x] Main pushed to remote: YES
+- [x] Documentation updated and current: YES
+- [x] Production deploy: SKIPPED (no deploy command configured)
+- [x] Local, remote, and main are consistent: YES
+- Verified at: 2026-04-04

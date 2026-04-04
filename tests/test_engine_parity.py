@@ -159,3 +159,54 @@ def test_congress_single_txn_insufficient():
     assert direct_congress_engine.label_from_score(0.5, 0.8, transaction_count=0) == "insufficient"
     assert direct_congress_engine.label_from_score(0.5, 0.8, transaction_count=2) == "bullish"
     assert direct_congress_engine.label_from_score(-0.5, 0.8, transaction_count=2) == "bearish"
+
+
+def test_disclosure_lag_penalty():
+    """Disclosure lag penalty should decay with time between execution and disclosure."""
+    from signals.congress.engine import disclosure_lag_penalty
+
+    # Same day or close: no penalty
+    assert disclosure_lag_penalty(datetime(2026, 3, 1), datetime(2026, 3, 2)) == 1.0
+    # 30 days: still no penalty
+    assert disclosure_lag_penalty(datetime(2026, 3, 1), datetime(2026, 3, 31)) == 1.0
+    # 45 days: moderate penalty
+    assert disclosure_lag_penalty(datetime(2026, 3, 1), datetime(2026, 4, 15)) == 0.85
+    # 90 days: significant penalty
+    assert disclosure_lag_penalty(datetime(2026, 3, 1), datetime(2026, 5, 30)) == 0.6
+    # 180 days: heavy penalty
+    assert disclosure_lag_penalty(datetime(2026, 3, 1), datetime(2026, 8, 28)) == 0.3
+    # Unknown: moderate default
+    assert disclosure_lag_penalty(None, datetime(2026, 3, 1)) == 0.7
+    assert disclosure_lag_penalty(datetime(2026, 3, 1), None) == 0.7
+
+
+def test_minimum_trade_value_insider_exclusion():
+    """Insider trades below $10K should be excluded with BELOW_MINIMUM_VALUE."""
+    from signals.insider.direct_service import MINIMUM_INSIDER_TRADE_VALUE
+    assert MINIMUM_INSIDER_TRADE_VALUE == 10_000
+
+
+def test_minimum_trade_value_congress_exclusion():
+    """Congress trades in lowest bracket should be excluded."""
+    from signals.congress.direct_service import MINIMUM_CONGRESS_TRADE_AMOUNT
+    from signals.congress.senate_direct import MINIMUM_CONGRESS_TRADE_AMOUNT as SENATE_MIN
+    assert MINIMUM_CONGRESS_TRADE_AMOUNT == 15_000
+    assert SENATE_MIN == 15_000
+
+
+def test_staleness_continuous_decay():
+    """Staleness penalty should be continuous with no cliffs."""
+    from signals.congress.engine import staleness_penalty
+
+    ref = datetime(2026, 4, 2)
+    # At 0 days: 1.0
+    assert math.isclose(staleness_penalty(datetime(2026, 4, 2), ref), 1.0)
+    # At 60 days (half-life): ~0.5
+    assert math.isclose(staleness_penalty(datetime(2026, 2, 1), ref), 0.5, abs_tol=0.01)
+    # Monotonically decreasing: no cliffs
+    prev = 1.0
+    for days in range(1, 365):
+        from datetime import timedelta
+        val = staleness_penalty(ref - timedelta(days=days), ref)
+        assert val <= prev, f"Staleness increased at day {days}: {prev} -> {val}"
+        prev = val
