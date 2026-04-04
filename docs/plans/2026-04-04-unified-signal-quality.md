@@ -138,3 +138,34 @@ No downstream consumers outside this repo. Changes are isolated to scoring const
 - `docs/reason-codes.md` — verify codes match `enums.py`
 - `src/signals/core/versioning.py` — bump versions
 - Inline comments referencing old constant values
+
+---
+
+## Execution Results
+
+**Executed:** 2026-04-04
+**Branch:** `feat/signal-quality-quick-wins`
+**Commits:** 7 (1 unplanned parser fix + 4 planned quality changes + 1 version bump + 1 plan doc)
+
+### Unit 0 Results
+- 9,238 Form 4 XMLs scored → 23,659 normalized transactions, 390 signal results
+- **Unplanned fix discovered:** Parser was not extracting `issuerTradingSymbol` from XML. Fixed in `parser.py` (2 lines) and `direct_service.py` (1 line). This increased entity-keyed signals from 6 to 130 and entity overlap from 6 to 33.
+- Combined overlay produced 4 results: GOOG (aligned bearish), AAPL/AMZN/BKNG (low confidence alignment or conflict)
+- 199 congress-only entities blocked as SINGLE_SOURCE_ONLY, 12 as AMBIGUOUS
+- Decision gate passed: 33 > 10 entity overlap threshold
+
+### Unit 1 Results
+- All 4 signal quality changes implemented and tested
+- 5 new tests added to `test_engine_parity.py`
+- 2 parity fixtures updated (`insider_engine_agg.json`, `expected_vertical_slice.json`)
+- Method versions bumped to `2026-04-04.quality1`
+- 71/72 tests pass (1 pre-existing `rg` subprocess failure)
+
+### Issues Encountered
+- Insider parser missing `issuerTradingSymbol` field — root cause of low overlay overlap. Fixed.
+- Vertical slice `_run_congress_vertical_slice` (line 319) uses inline label logic, bypassing `label_from_score()`. Acceptable — vertical slice is a fixture test tool, not production scoring.
+- Plan document committed after execution commits (process violation — should precede).
+
+### Process Notes
+- Plan Hard 30% #4 (near-zero overlap) correctly predicted the critical issue
+- The parser fix was scope creep but was necessary and justified by the decision gate
