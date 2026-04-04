@@ -116,6 +116,14 @@ def test_single_transaction_returns_insufficient():
     assert result["confidence"] == 0.0
 
 
+def test_mixed_direction_no_bonus():
+    """Mixed buy/sell should NOT get a confidence bonus over single-direction."""
+    # Unanimous direction is higher conviction — mixed should not be rewarded
+    conf_mixed = direct_insider_engine._compute_confidence(4, 2, has_buys=True, has_sells=True)
+    conf_single = direct_insider_engine._compute_confidence(4, 2, has_buys=True, has_sells=False)
+    assert conf_mixed == conf_single
+
+
 def test_managed_account_zero_weight():
     """Managed account trades should have zero weight (member not making decisions)."""
     assert direct_congress_engine.get_owner_weight("managed") == 0.0

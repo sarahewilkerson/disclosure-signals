@@ -1,12 +1,12 @@
 {
   "signal": "neutral",
   "score": 0.0,
-  "confidence": 0.6063,
+  "confidence": 0.5512,
   "confidence_tier": "moderate",
   "buy_count": 1,
   "sell_count": 1,
   "unique_buyers": 1,
   "unique_sellers": 1,
-  "explanation": "Signal: NEUTRAL (score=0.000, confidence=0.61/moderate). Based on 1 buy(s) and 1 sell(s) from 1 buyer(s) and 1 seller(s) over the past 90 days. Largest contributor: insider CIK owner-1 (bearish, raw signal=0.000).",
+  "explanation": "Signal: NEUTRAL (score=0.000, confidence=0.55/moderate). Based on 1 buy(s) and 1 sell(s) from 1 buyer(s) and 1 seller(s) over the past 90 days. Largest contributor: insider CIK owner-1 (bearish, raw signal=0.000).",
   "window_days": 90
 }

@@ -203,7 +203,7 @@ def _compute_confidence(total_transactions: int, unique_insiders: int, has_buys:
         return 0.0
     txn_factor = min(1.0, math.log(1 + total_transactions) / math.log(11))
     breadth_factor = min(1.0, math.log(1 + unique_insiders) / math.log(6))
-    balance_factor = 1.1 if (has_buys and has_sells) else 1.0
+    balance_factor = 1.0
     confidence = (txn_factor * 0.4 + breadth_factor * 0.6) * balance_factor
     return min(confidence, CONFIDENCE_MAX)
 
