@@ -116,6 +116,28 @@ def test_single_transaction_returns_insufficient():
     assert result["confidence"] == 0.0
 
 
+def test_planned_trade_near_zero_signal():
+    """10b5-1 planned trades should produce ~5% of non-planned signal."""
+    reference_date = datetime(2026, 4, 2)
+    base_txn = {
+        "transaction_code": "S",
+        "role_class": "ceo",
+        "is_likely_planned": 0,
+        "ownership_nature": "D",
+        "pct_holdings_changed": 0.05,
+        "transaction_date": "2026-03-01",
+        "cik_owner": "owner-1",
+        "total_value": 100000.0,
+    }
+    planned_txn = {**base_txn, "is_likely_planned": 1}
+
+    normal_result = direct_insider_engine.score_transaction(base_txn, reference_date)
+    planned_result = direct_insider_engine.score_transaction(planned_txn, reference_date)
+
+    ratio = abs(planned_result["transaction_signal"]) / abs(normal_result["transaction_signal"])
+    assert math.isclose(ratio, 0.05, rel_tol=1e-9)
+
+
 def test_mixed_direction_no_bonus():
     """Mixed buy/sell should NOT get a confidence bonus over single-direction."""
     # Unanimous direction is higher conviction — mixed should not be rewarded
