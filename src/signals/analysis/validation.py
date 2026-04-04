@@ -446,3 +446,241 @@ def render_validation_markdown(report: dict) -> str:
                 lines.append(f"- **{label}:** {s['count']} signals, accuracy={acc}, mean_return={ret}")
 
     return "\n".join(lines) + "\n"
+
+
+def run_baseline_comparison(
+    db_path: str,
+    forward_days: list[int] | None = None,
+    min_date: str | None = None,
+    max_date: str | None = None,
+) -> dict:
+    """Compare scored model vs trivial baseline (predict bullish if any insider buy exists).
+
+    The trivial baseline: for each ticker with at least 1 insider buy in the period,
+    predict the stock will go up. No scoring, no weighting — just "did someone buy?"
+
+    If our scoring model doesn't outperform this, the multiplicative weights add no value.
+    """
+    if not HAS_YFINANCE:
+        return {"error": "yfinance not installed"}
+
+    if forward_days is None:
+        forward_days = [5, 20, 60]
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+
+    query = """
+        SELECT ticker, execution_date, amount_estimate, actor_type
+        FROM normalized_transactions
+        WHERE source = 'insider' AND include_in_signal = 1
+          AND direction = 'BUY' AND ticker IS NOT NULL AND execution_date IS NOT NULL
+    """
+    params: list = []
+    if min_date:
+        query += " AND execution_date >= ?"
+        params.append(min_date)
+    if max_date:
+        query += " AND execution_date <= ?"
+        params.append(max_date)
+
+    buy_rows = [dict(r) for r in conn.execute(query, params).fetchall()]
+    conn.close()
+
+    if not buy_rows:
+        return {"error": "No insider buys found", "buy_count": 0}
+
+    tickers = [r["ticker"].upper() for r in buy_rows]
+    dates = [r["execution_date"] for r in buy_rows]
+    returns = _fetch_forward_returns(tickers, dates, forward_days)
+
+    baseline_results: dict[str, dict] = {}
+    for fwd in forward_days:
+        correct = 0
+        total = 0
+        fwd_returns: list[float] = []
+        for row in buy_rows:
+            ticker = row["ticker"].upper()
+            ret = returns.get((ticker, row["execution_date"], fwd))
+            if ret is not None:
+                total += 1
+                fwd_returns.append(ret)
+                if ret > 0:
+                    correct += 1
+
+        baseline_results[f"{fwd}d"] = {
+            "baseline_accuracy": round(correct / total, 4) if total else None,
+            "baseline_mean_return": round(statistics.mean(fwd_returns), 6) if fwd_returns else None,
+            "baseline_count": total,
+        }
+
+    return {
+        "buy_transactions": len(buy_rows),
+        "forward_windows": forward_days,
+        "comparison": baseline_results,
+    }
+
+
+def run_regime_analysis(
+    db_path: str,
+    forward_days: list[int] | None = None,
+    min_date: str | None = None,
+    max_date: str | None = None,
+    regime_lookback_days: int = 60,
+) -> dict:
+    """Compute insider buy accuracy conditional on market regime.
+
+    Regime defined by SPY trailing return over `regime_lookback_days`:
+    bull (SPY > 0) vs bear (SPY <= 0).
+    """
+    if not HAS_YFINANCE:
+        return {"error": "yfinance not installed"}
+
+    if forward_days is None:
+        forward_days = [5, 20, 60]
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+
+    query = """
+        SELECT ticker, execution_date
+        FROM normalized_transactions
+        WHERE source = 'insider' AND include_in_signal = 1
+          AND direction = 'BUY' AND ticker IS NOT NULL AND execution_date IS NOT NULL
+    """
+    params: list = []
+    if min_date:
+        query += " AND execution_date >= ?"
+        params.append(min_date)
+    if max_date:
+        query += " AND execution_date <= ?"
+        params.append(max_date)
+
+    rows = [dict(r) for r in conn.execute(query, params).fetchall()]
+    conn.close()
+
+    if not rows:
+        return {"error": "No insider buys found"}
+
+    all_dates = [datetime.strptime(r["execution_date"], "%Y-%m-%d") for r in rows]
+    earliest = min(all_dates) - timedelta(days=regime_lookback_days + 10)
+    latest = max(all_dates) + timedelta(days=max(forward_days) + 10)
+
+    try:
+        spy_data = yf.download(
+            "SPY", start=earliest.strftime("%Y-%m-%d"),
+            end=latest.strftime("%Y-%m-%d"), progress=False, auto_adjust=True,
+        )
+        if hasattr(spy_data.columns, "levels"):
+            spy_data.columns = spy_data.columns.get_level_values(0)
+        spy_close = spy_data["Close"]
+    except Exception:
+        return {"error": "Could not fetch SPY data"}
+
+    def _get_regime(exec_date: datetime) -> str | None:
+        lookback_start = exec_date - timedelta(days=regime_lookback_days)
+        start_idx = spy_close.index.searchsorted(lookback_start)
+        end_idx = spy_close.index.searchsorted(exec_date)
+        if start_idx >= len(spy_close) or end_idx >= len(spy_close) or start_idx == end_idx:
+            return None
+        spy_return = (spy_close.iloc[end_idx] - spy_close.iloc[start_idx]) / spy_close.iloc[start_idx]
+        return "bull" if float(spy_return) > 0 else "bear"
+
+    tickers = [r["ticker"].upper() for r in rows]
+    dates = [r["execution_date"] for r in rows]
+    returns = _fetch_forward_returns(tickers, dates, forward_days)
+
+    regime_results: dict[str, dict] = {}
+    for fwd in forward_days:
+        bull_correct, bull_total = 0, 0
+        bear_correct, bear_total = 0, 0
+        bull_returns: list[float] = []
+        bear_returns: list[float] = []
+
+        for row in rows:
+            exec_dt = datetime.strptime(row["execution_date"], "%Y-%m-%d")
+            regime = _get_regime(exec_dt)
+            if regime is None:
+                continue
+            ticker = row["ticker"].upper()
+            ret = returns.get((ticker, row["execution_date"], fwd))
+            if ret is None:
+                continue
+
+            if regime == "bull":
+                bull_total += 1
+                bull_returns.append(ret)
+                if ret > 0:
+                    bull_correct += 1
+            else:
+                bear_total += 1
+                bear_returns.append(ret)
+                if ret > 0:
+                    bear_correct += 1
+
+        regime_results[f"{fwd}d"] = {
+            "bull": {
+                "count": bull_total,
+                "accuracy": round(bull_correct / bull_total, 4) if bull_total else None,
+                "mean_return": round(statistics.mean(bull_returns), 6) if bull_returns else None,
+            },
+            "bear": {
+                "count": bear_total,
+                "accuracy": round(bear_correct / bear_total, 4) if bear_total else None,
+                "mean_return": round(statistics.mean(bear_returns), 6) if bear_returns else None,
+            },
+        }
+
+    return {
+        "transaction_count": len(rows),
+        "regime_lookback_days": regime_lookback_days,
+        "forward_windows": forward_days,
+        "regime_analysis": regime_results,
+    }
+
+
+def render_baseline_comparison_markdown(report: dict) -> str:
+    if "error" in report:
+        return f"# Baseline Comparison\n\n**Error:** {report['error']}\n"
+
+    lines = [
+        "# Model vs Trivial Baseline",
+        "",
+        f"**Insider buy transactions:** {report['buy_transactions']}",
+        "",
+        "Baseline: predict bullish for any ticker with an insider buy (no scoring).",
+        "",
+        "| Window | Baseline Accuracy | N | Mean Return |",
+        "|--------|-------------------|---|-------------|",
+    ]
+    for key, stats in report["comparison"].items():
+        b_acc = f"{stats['baseline_accuracy']:.1%}" if stats["baseline_accuracy"] is not None else "N/A"
+        b_ret = f"{stats['baseline_mean_return']:.4%}" if stats["baseline_mean_return"] is not None else "N/A"
+        lines.append(f"| {key} | {b_acc} | {stats['baseline_count']} | {b_ret} |")
+
+    return "\n".join(lines) + "\n"
+
+
+def render_regime_analysis_markdown(report: dict) -> str:
+    if "error" in report:
+        return f"# Regime Analysis\n\n**Error:** {report['error']}\n"
+
+    lines = [
+        "# Insider Buy Accuracy by Market Regime",
+        "",
+        f"**Transactions:** {report['transaction_count']}",
+        f"**Regime:** SPY {report['regime_lookback_days']}-day trailing return (>0 = bull, <=0 = bear)",
+        "",
+        "| Window | Bull Accuracy | Bull N | Bear Accuracy | Bear N | Bull Mean Ret | Bear Mean Ret |",
+        "|--------|--------------|--------|--------------|--------|---------------|---------------|",
+    ]
+    for key, data in report["regime_analysis"].items():
+        b = data["bull"]
+        r = data["bear"]
+        b_acc = f"{b['accuracy']:.1%}" if b["accuracy"] is not None else "N/A"
+        r_acc = f"{r['accuracy']:.1%}" if r["accuracy"] is not None else "N/A"
+        b_ret = f"{b['mean_return']:.4%}" if b["mean_return"] is not None else "N/A"
+        r_ret = f"{r['mean_return']:.4%}" if r["mean_return"] is not None else "N/A"
+        lines.append(f"| {key} | {b_acc} | {b['count']} | {r_acc} | {r['count']} | {b_ret} | {r_ret} |")
+
+    return "\n".join(lines) + "\n"
