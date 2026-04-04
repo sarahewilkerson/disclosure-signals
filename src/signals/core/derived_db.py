@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS combined_results (
     combine_method_version TEXT NOT NULL,
     do_not_combine_reason_code TEXT,
     do_not_combine_reason_detail TEXT,
+    strength_tier TEXT,
     combine_fingerprint TEXT NOT NULL,
     UNIQUE(subject_key, as_of_date, combine_method_version, combine_fingerprint)
 );
@@ -181,6 +182,7 @@ def init_db(db_path: str) -> None:
         _ensure_column(conn, "normalized_transactions", "resolution_event_id", "TEXT")
         _ensure_column(conn, "combined_results", "overlay_outcome", "TEXT")
         _ensure_column(conn, "combined_results", "conflict_score", "REAL")
+        _ensure_column(conn, "combined_results", "strength_tier", "TEXT")
 
 
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:

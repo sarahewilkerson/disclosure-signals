@@ -8,6 +8,14 @@ from signals.core.resolution import make_eligibility_decision
 from signals.core.versioning import COMBINE_METHOD_VERSION
 
 
+def _classify_strength(insider_confidence: float, congress_confidence: float, score_magnitude: float) -> str:
+    if insider_confidence >= 0.7 and congress_confidence >= 0.7 and score_magnitude > 0.3:
+        return "strong"
+    if insider_confidence >= 0.4 and congress_confidence >= 0.4:
+        return "moderate"
+    return "weak"
+
+
 def _fallback_resolution_event(row: SignalResult | None) -> EntityResolutionEvent | None:
     if row is None:
         return None
@@ -93,6 +101,7 @@ def build_overlay(
         resolution_conf = min(insider_event.resolution_confidence if insider_event else 0.0, congress_event.resolution_confidence)
 
         net_score = (match.score + congress_row.score) / 2
+        strength_tier = _classify_strength(match.confidence, congress_row.confidence, abs(net_score))
         if decision.outcome == OverlayOutcome.ALIGNED_BULLISH.value:
             state = decision.outcome
             label = "bullish"
@@ -140,6 +149,7 @@ def build_overlay(
                 combine_method_version=COMBINE_METHOD_VERSION,
                 do_not_combine_reason_code=None,
                 do_not_combine_reason_detail=None,
+                strength_tier=strength_tier,
             )
         )
 

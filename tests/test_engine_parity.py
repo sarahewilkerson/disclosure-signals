@@ -210,3 +210,18 @@ def test_staleness_continuous_decay():
         val = staleness_penalty(ref - timedelta(days=days), ref)
         assert val <= prev, f"Staleness increased at day {days}: {prev} -> {val}"
         prev = val
+
+
+def test_strength_tier_classification():
+    """Signal strength tiers should classify based on confidence and score magnitude."""
+    from signals.combined.overlay import _classify_strength
+
+    # Strong: both high confidence + large score
+    assert _classify_strength(0.8, 0.75, 0.5) == "strong"
+    # Moderate: both reasonable confidence
+    assert _classify_strength(0.5, 0.5, 0.1) == "moderate"
+    # Weak: one side below threshold
+    assert _classify_strength(0.3, 0.8, 0.5) == "weak"
+    assert _classify_strength(0.8, 0.2, 0.5) == "weak"
+    # Edge: high confidence but low score magnitude → moderate (not strong)
+    assert _classify_strength(0.8, 0.8, 0.2) == "moderate"

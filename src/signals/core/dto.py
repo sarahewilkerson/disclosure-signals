@@ -98,6 +98,7 @@ class CombinedResult:
     combine_method_version: str
     do_not_combine_reason_code: str | None
     do_not_combine_reason_detail: str | None
+    strength_tier: str | None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
