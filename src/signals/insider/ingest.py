@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import os
 import re
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from typing import Callable
 
 import requests
 
@@ -20,6 +22,7 @@ SEC_ARCHIVES_URL = f"{SEC_BASE_URL}/Archives/edgar/data"
 SEC_COMPANY_TICKERS_URL = f"{SEC_BASE_URL}/files/company_tickers.json"
 SEC_RATE_LIMIT_DELAY = 0.12
 SEC_MAX_RETRIES = 3
+INGEST_STATE_VERSION = 1
 
 
 class DirectEdgarClient:
@@ -110,6 +113,62 @@ def load_universe_csv(csv_path: str, tickers_map: dict[str, dict]) -> list[dict]
                 }
             )
     return companies
+
+
+def _universe_fingerprint(csv_path: str, *, start_date: str | None, end_date: str | None, max_filings_per_company: int | None) -> str:
+    path = Path(csv_path)
+    digest = hashlib.sha256()
+    digest.update(path.read_bytes())
+    digest.update(f"|start={start_date or ''}|end={end_date or ''}|max={max_filings_per_company or ''}".encode("utf-8"))
+    return digest.hexdigest()
+
+
+def _ingest_state_path(cache_root: Path) -> Path:
+    return cache_root / "insider_ingest_state.json"
+
+
+def _write_state(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True))
+    tmp.replace(path)
+
+
+def _load_state(path: Path, *, fingerprint: str) -> dict | None:
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text())
+    except Exception:
+        return None
+    if payload.get("version") != INGEST_STATE_VERSION:
+        return None
+    if payload.get("fingerprint") != fingerprint:
+        return None
+    return payload
+
+
+def _fresh_state(*, fingerprint: str, csv_path: str, start_date: str | None, end_date: str | None, max_filings_per_company: int | None, companies_total: int) -> dict:
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    return {
+        "version": INGEST_STATE_VERSION,
+        "fingerprint": fingerprint,
+        "csv_path": str(csv_path),
+        "start_date": start_date,
+        "end_date": end_date,
+        "max_filings_per_company": max_filings_per_company,
+        "companies_total": companies_total,
+        "companies_completed": 0,
+        "total_new_filings": 0,
+        "completed_companies": {},
+        "started_at": now,
+        "updated_at": now,
+    }
+
+
+def _emit_progress(callback: Callable[[dict], None] | None, payload: dict) -> None:
+    if callback is not None:
+        callback(payload)
 
 
 def search_form4_filings(client: DirectEdgarClient, issuer_cik: str, start_date: str | None = None, end_date: str | None = None, max_results: int = 100) -> list[dict]:
@@ -266,16 +325,73 @@ def download_filing_xml(client: DirectEdgarClient, xml_url: str, accession_numbe
         return None
 
 
-def ingest_universe_direct(*, csv_path: str, user_agent: str, cache_dir: str, max_filings_per_company: int | None = None, start_date: str | None = None, end_date: str | None = None) -> dict:
+def ingest_universe_direct(
+    *,
+    csv_path: str,
+    user_agent: str,
+    cache_dir: str,
+    max_filings_per_company: int | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    resume: bool = True,
+    progress_callback: Callable[[dict], None] | None = None,
+) -> dict:
     cache_root = Path(cache_dir)
     client = DirectEdgarClient(user_agent)
     tickers_map = load_company_tickers_map(client, cache_root / "company_tickers.json")
     companies = load_universe_csv(csv_path, tickers_map)
+    fingerprint = _universe_fingerprint(
+        csv_path,
+        start_date=start_date,
+        end_date=end_date,
+        max_filings_per_company=max_filings_per_company,
+    )
+    state_path = _ingest_state_path(cache_root)
+    state = _load_state(state_path, fingerprint=fingerprint) if resume else None
+    if state is None:
+        state = _fresh_state(
+            fingerprint=fingerprint,
+            csv_path=csv_path,
+            start_date=start_date,
+            end_date=end_date,
+            max_filings_per_company=max_filings_per_company,
+            companies_total=len(companies),
+        )
+        _write_state(state_path, state)
     filings_dir = cache_root / "filings"
     total_new_filings = 0
     per_company = []
-    for company in companies:
+    completed_companies: dict[str, dict] = state.setdefault("completed_companies", {})
+    resumed_count = len(completed_companies)
+    _emit_progress(
+        progress_callback,
+        {
+            "event": "start",
+            "companies_total": len(companies),
+            "companies_completed": resumed_count,
+            "remaining_companies": max(0, len(companies) - resumed_count),
+            "state_path": str(state_path),
+            "resume_enabled": resume,
+        },
+    )
+    for index, company in enumerate(companies, start=1):
         cik = company["cik"]
+        completed = completed_companies.get(cik)
+        if completed is not None:
+            per_company.append({"ticker": company["ticker"], "cik": cik, "downloaded": int(completed.get("downloaded", 0)), "resumed": True})
+            _emit_progress(
+                progress_callback,
+                {
+                    "event": "company_skipped",
+                    "index": index,
+                    "companies_total": len(companies),
+                    "ticker": company["ticker"],
+                    "cik": cik,
+                    "downloaded": int(completed.get("downloaded", 0)),
+                    "reason": "already_completed",
+                },
+            )
+            continue
         form4s = search_form4_filings(client, cik, start_date=start_date, end_date=end_date, max_results=max_filings_per_company or 200)
         if max_filings_per_company:
             form4s = form4s[:max_filings_per_company]
@@ -289,11 +405,48 @@ def ingest_universe_direct(*, csv_path: str, user_agent: str, cache_dir: str, ma
             if local_path:
                 downloaded += 1
                 total_new_filings += 1
-        per_company.append({"ticker": company["ticker"], "cik": cik, "downloaded": downloaded})
-    return {
+        company_payload = {"ticker": company["ticker"], "cik": cik, "downloaded": downloaded, "resumed": False}
+        per_company.append(company_payload)
+        completed_companies[cik] = {
+            "ticker": company["ticker"],
+            "downloaded": downloaded,
+            "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        state["companies_completed"] = len(completed_companies)
+        state["total_new_filings"] = sum(int(item.get("downloaded", 0)) for item in completed_companies.values())
+        state["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        _write_state(state_path, state)
+        _emit_progress(
+            progress_callback,
+            {
+                "event": "company_completed",
+                "index": index,
+                "companies_total": len(companies),
+                "ticker": company["ticker"],
+                "cik": cik,
+                "downloaded": downloaded,
+                "total_downloaded": state["total_new_filings"],
+            },
+        )
+    payload = {
         "companies_processed": len(companies),
-        "total_new_filings": total_new_filings,
+        "total_new_filings": state["total_new_filings"],
         "cache_dir": str(cache_root),
         "filings_dir": str(filings_dir),
         "per_company": per_company,
+        "state_path": str(state_path),
+        "companies_completed": state["companies_completed"],
+        "remaining_companies": max(0, len(companies) - state["companies_completed"]),
+        "resumed_companies": resumed_count,
     }
+    _emit_progress(
+        progress_callback,
+        {
+            "event": "finished",
+            "companies_total": len(companies),
+            "companies_completed": state["companies_completed"],
+            "total_new_filings": state["total_new_filings"],
+            "state_path": str(state_path),
+        },
+    )
+    return payload

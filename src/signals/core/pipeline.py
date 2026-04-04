@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 
 from signals.analysis.production_confidence import (
     build_production_confidence_report,
@@ -263,8 +264,14 @@ def run_direct_pipeline(
     senate_days: int = 365,
     senate_max_filings: int | None = None,
     artifact_dir: Path | None = None,
+    progress_callback: Callable[[str, dict], None] | None = None,
 ) -> UnifiedRunResult:
+    def _emit(stage: str, payload: dict) -> None:
+        if progress_callback is not None:
+            progress_callback(stage, payload)
+
     def _run_insider_branch():
+        _emit("insider_ingest_start", {"csv_path": insider_csv_path, "cache_dir": insider_cache_dir})
         insider_ingest = ingest_universe_direct(
             csv_path=insider_csv_path,
             user_agent=insider_user_agent,
@@ -272,16 +279,20 @@ def run_direct_pipeline(
             max_filings_per_company=insider_max_filings,
             start_date=None,
             end_date=None,
+            progress_callback=lambda payload: _emit("insider_ingest", payload),
         )
+        _emit("insider_score_start", {"filings_dir": insider_ingest["filings_dir"]})
         insider = run_direct_xml_into_derived(
             repo_root=repo_root,
             derived_db_path=derived_db_path,
             xml_dir=insider_ingest["filings_dir"],
             reference_date=reference_date,
         )
+        _emit("insider_score_done", insider.to_dict())
         return insider_ingest, insider
 
     def _run_house_branch():
+        _emit("house_ingest_start", {"cache_dir": congress_cache_dir, "days": house_days})
         house_ingest = ingest_house_ptrs_direct(
             repo_root=repo_root,
             cache_dir=congress_cache_dir,
@@ -289,6 +300,8 @@ def run_direct_pipeline(
             max_filings=house_max_filings,
             force=False,
         )
+        _emit("house_ingest_done", house_ingest.to_dict())
+        _emit("house_score_start", {"pdf_dir": house_ingest.pdf_dir})
         house = run_direct_house_pdfs_into_derived(
             repo_root=repo_root,
             derived_db_path=derived_db_path,
@@ -297,9 +310,11 @@ def run_direct_pipeline(
             window_days=lookback_window,
             max_files=house_max_filings,
         )
+        _emit("house_score_done", house.to_dict())
         return house_ingest, house
 
     def _run_senate_branch():
+        _emit("senate_ingest_start", {"cache_dir": congress_cache_dir, "days": senate_days})
         senate_ingest = ingest_senate_ptrs_direct(
             repo_root=repo_root,
             cache_dir=congress_cache_dir,
@@ -307,6 +322,8 @@ def run_direct_pipeline(
             max_filings=senate_max_filings,
             force=False,
         )
+        _emit("senate_ingest_done", senate_ingest.to_dict())
+        _emit("senate_score_start", {"html_dir": senate_ingest.html_dir})
         senate = run_direct_senate_html_into_derived(
             repo_root=repo_root,
             derived_db_path=derived_db_path,
@@ -315,6 +332,7 @@ def run_direct_pipeline(
             window_days=lookback_window,
             max_files=senate_max_filings,
         )
+        _emit("senate_score_done", senate.to_dict())
         return senate_ingest, senate
 
     with ThreadPoolExecutor(max_workers=3) as executor:
@@ -325,7 +343,9 @@ def run_direct_pipeline(
         house_ingest, house = house_future.result()
         senate_ingest, senate = senate_future.result()
 
+    _emit("combined_build_start", {"lookback_window": lookback_window})
     combined = build_from_derived(repo_root, derived_db_path, lookback_window=lookback_window)
+    _emit("combined_build_done", combined.to_dict())
 
     init_db(derived_db_path)
     with get_connection(derived_db_path) as conn:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import warnings
 from datetime import datetime
 from pathlib import Path
@@ -39,6 +40,46 @@ from signals.insider.diagnostics import build_insider_candidate_discovery
 from signals.insider.ingest import ingest_universe_direct
 from signals.reporting.formatters import render_json, render_text
 from signals.reporting.service import build_combined_report, build_source_report
+
+
+def _emit_progress(stage: str, payload: dict):
+    event = payload.get("event")
+    if event == "company_completed":
+        message = (
+            f"[progress] {stage} "
+            f"{payload.get('index')}/{payload.get('companies_total')} "
+            f"{payload.get('ticker')} downloaded={payload.get('downloaded')} "
+            f"total_downloaded={payload.get('total_downloaded')}"
+        )
+    elif event == "company_skipped":
+        message = (
+            f"[progress] {stage} "
+            f"{payload.get('index')}/{payload.get('companies_total')} "
+            f"{payload.get('ticker')} skipped={payload.get('reason')}"
+        )
+    elif event in {"start", "finished"}:
+        message = (
+            f"[progress] {stage} {event} "
+            f"completed={payload.get('companies_completed', 0)}/{payload.get('companies_total', 0)} "
+            f"remaining={payload.get('remaining_companies', 0)} "
+            f"total_downloaded={payload.get('total_new_filings', 0)}"
+        )
+    else:
+        summary_keys = [
+            "run_id",
+            "downloaded_count",
+            "downloaded_ptr_count",
+            "imported_result_count",
+            "imported_normalized_count",
+            "combined_count",
+            "blocked_count",
+            "xml_count",
+            "pdf_count",
+            "html_count",
+        ]
+        parts = [f"{key}={payload[key]}" for key in summary_keys if key in payload]
+        message = f"[progress] {stage}" + (f" {' '.join(parts)}" if parts else "")
+    print(message, file=sys.stderr, flush=True)
 
 
 def repo_root() -> Path:
@@ -209,6 +250,8 @@ def cmd_insider_rewrite_ingest(args):
         max_filings_per_company=args.max_filings,
         start_date=args.start_date,
         end_date=args.end_date,
+        resume=not getattr(args, "no_resume", False),
+        progress_callback=lambda payload: _emit_progress("insider_ingest", payload),
     )
     if args.format == "json":
         print(json.dumps(result, indent=2))
@@ -228,13 +271,17 @@ def cmd_insider_rewrite_run(args):
         max_filings_per_company=args.max_filings,
         start_date=args.start_date,
         end_date=args.end_date,
+        resume=not getattr(args, "no_resume", False),
+        progress_callback=lambda payload: _emit_progress("insider_ingest", payload),
     )
+    _emit_progress("insider_score_start", {"filings_dir": ingest_result["filings_dir"]})
     score_result = run_direct_xml_into_derived(
         repo_root=repo_root(),
         derived_db_path=args.db,
         xml_dir=ingest_result["filings_dir"],
         reference_date=reference_date,
     )
+    _emit_progress("insider_score_done", score_result.to_dict())
     payload = {
         "ingest": ingest_result,
         "score": score_result.to_dict(),
@@ -651,6 +698,7 @@ def cmd_run(args):
             senate_days=args.senate_days,
             senate_max_filings=args.senate_max_filings,
             artifact_dir=Path(args.artifacts_dir) if args.artifacts_dir else None,
+            progress_callback=_emit_progress,
         )
     else:
         _compat_warning("run --legacy")
@@ -706,6 +754,7 @@ def cmd_validate_live(args):
         senate_days=args.senate_days,
         senate_max_filings=args.senate_max_filings,
         artifact_dir=Path(args.artifacts_dir) if args.artifacts_dir else None,
+        progress_callback=_emit_progress,
     )
     payload = {
         "analysis": result.analysis,
@@ -857,6 +906,7 @@ def build_parser() -> argparse.ArgumentParser:
     insider_rewrite_ingest.add_argument("--max-filings", type=int, default=None, help="Maximum filings per company")
     insider_rewrite_ingest.add_argument("--start-date", dest="start_date", default=None, help="Historical backfill start date")
     insider_rewrite_ingest.add_argument("--end-date", dest="end_date", default=None, help="Historical backfill end date")
+    insider_rewrite_ingest.add_argument("--no-resume", action="store_true", help="Ignore any existing ingest checkpoint state in the cache dir")
     insider_rewrite_ingest.add_argument("--sec-user-agent", required=True, help="SEC-compliant user agent")
     insider_rewrite_ingest.set_defaults(func=cmd_insider_rewrite_ingest)
     insider_rewrite = insider_sub.add_parser("rewrite-score", help="Run the rewritten insider XML-to-derived score flow without the legacy insider DB")
@@ -869,6 +919,7 @@ def build_parser() -> argparse.ArgumentParser:
     insider_rewrite_run.add_argument("--max-filings", type=int, default=None, help="Maximum filings per company")
     insider_rewrite_run.add_argument("--start-date", dest="start_date", default=None, help="Historical backfill start date")
     insider_rewrite_run.add_argument("--end-date", dest="end_date", default=None, help="Historical backfill end date")
+    insider_rewrite_run.add_argument("--no-resume", action="store_true", help="Ignore any existing ingest checkpoint state in the cache dir")
     insider_rewrite_run.add_argument("--date", default=None, help="Reference date YYYY-MM-DD")
     insider_rewrite_run.add_argument("--sec-user-agent", required=True, help="SEC-compliant user agent")
     insider_rewrite_run.set_defaults(func=cmd_insider_rewrite_run)
