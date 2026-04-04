@@ -74,3 +74,32 @@ Increment `INSIDER_SCORE_METHOD_VERSION` and `CONGRESS_SCORE_METHOD_VERSION`.
 | `src/signals/congress/constants.py` | Add MINIMUM_CONGRESS_TRADE_AMOUNT |
 | `src/signals/core/versioning.py` | Bump versions |
 | `tests/test_engine_parity.py` | Update sell-related fixtures |
+
+---
+
+## Execution Results
+
+**Executed:** 2026-04-04
+**Branch:** `feat/validation-driven-tuning`
+**Commits:** 4 (sell weight + disclosure_date + constant dedup + version bump)
+
+### Results
+- **5a:** Sell weight -0.5 → -0.15. Bearish signals dropped from 45 to 20, neutral increased from 59 to 84. Sell-dominated entities correctly reclassified as neutral.
+- **5b:** House passes `txn.notification_date`, Senate passes `reference_date` (actual filing_date not available in scoring loop). No more flat 0.7 default for house trades.
+- **5c:** `MINIMUM_CONGRESS_TRADE_AMOUNT` moved to `constants.py`, imported by both services.
+- **5d:** Versions bumped to quality2 (insider) and quality3 (congress).
+- All tests pass (77/78, 1 pre-existing).
+
+### Impact on Combined Overlay
+- 4 combined results: AMZN, AAPL, GOOG, BKNG (all moderate strength)
+- GOOG insider_score: -0.88 → -0.39 (sells contribute less, more accurate)
+
+## Sync Verification
+- [x] Verification strategy executed: PASS
+- [x] Branch pushed to remote: YES
+- [x] Branch merged to main: YES (fast-forward)
+- [x] Main pushed to remote: YES
+- [x] Documentation updated and current: YES
+- [x] Production deploy: SKIPPED
+- [x] Local, remote, and main are consistent: YES
+- Verified at: 2026-04-04
