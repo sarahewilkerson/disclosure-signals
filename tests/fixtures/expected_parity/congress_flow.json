@@ -8,10 +8,10 @@
   "owner_type": "self",
   "base_value": 3874.9193539995126,
   "direction": 1.0,
-  "staleness_penalty": 0.2,
+  "staleness_penalty": 0.0002809314130769433,
   "owner_weight": 1.0,
   "resolution_confidence": 1.0,
   "signal_weight": 1.0,
-  "raw_score": 774.9838707999025,
-  "final_score": 542.4887095599317
+  "raw_score": 1.0885865696782795,
+  "final_score": 0.7620105987747956
 }

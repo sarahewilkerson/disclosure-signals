@@ -57,21 +57,16 @@ def get_owner_weight(owner_type: str) -> float:
     return _DEFAULT_OWNER_WEIGHTS.get(owner_type, 0.3)
 
 
+STALENESS_HALF_LIFE_DAYS = 60
+
+
 def staleness_penalty(execution_date: datetime | None, reference_date: datetime) -> float:
     if execution_date is None:
         return 0.5
     lag_days = (reference_date - execution_date).days
     if lag_days < 0:
         return 0.9
-    if lag_days <= 45:
-        return 1.0
-    if lag_days <= 60:
-        return 0.9
-    if lag_days <= 90:
-        return 0.7
-    if lag_days <= 180:
-        return 0.4
-    return 0.2
+    return math.exp(-0.693 * lag_days / STALENESS_HALF_LIFE_DAYS)
 
 
 def disclosure_lag_penalty(execution_date: datetime | None, disclosure_date: datetime | None) -> float:

@@ -9,12 +9,12 @@
     "owner_type": "self",
     "base_value": 27387.040730973473,
     "direction": 1.0,
-    "staleness_penalty": 1.0,
+    "staleness_penalty": 0.6910106796357246,
     "owner_weight": 1.0,
     "resolution_confidence": 1.0,
     "signal_weight": 1.0,
-    "raw_score": 27387.040730973473,
-    "final_score": 19170.928511681428
+    "raw_score": 18924.73762872125,
+    "final_score": 13247.316340104875
   },
   "aggregate": {
     "breadth_pct": 1.0,
@@ -22,24 +22,24 @@
     "buyers": 1,
     "sellers": 0,
     "neutral": 0,
-    "volume_net": 958.5464255840715,
-    "volume_buy": 958.5464255840715,
+    "volume_net": 662.3658170052438,
+    "volume_buy": 662.3658170052438,
     "volume_sell": 0,
     "concentration_top5": 1.0,
     "is_concentrated": true,
     "members_capped": 1,
-    "mean_staleness": 1.0,
+    "mean_staleness": 0.6910106796357246,
     "transactions_included": 1,
     "transactions_excluded": 0
   },
   "confidence": {
-    "composite_score": 0.5055000000000001,
+    "composite_score": 0.4437021359271449,
     "tier": "MODERATE",
     "factors": {
       "member_coverage": 0.02,
       "transaction_volume": 0.005,
       "resolution_quality": 1.0,
-      "timeliness": 1.0,
+      "timeliness": 0.6910106796357246,
       "balance": 1.0,
       "concentration": 0.0
     },
