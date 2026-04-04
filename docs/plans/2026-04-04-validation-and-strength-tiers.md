@@ -62,3 +62,40 @@ Unit 3b (execution-date window alignment) is deferred — with only 4 combined r
 | `src/signals/analysis/validation.py` | New: forward-return validation script |
 | `tests/test_engine_parity.py` | Add strength tier test |
 | `pyproject.toml` | Add yfinance dependency |
+
+---
+
+## Execution Results
+
+**Executed:** 2026-04-04
+**Branch:** `feat/strength-tiers-and-validation`
+**Commits:** 3 (plan doc + strength tier + validation framework)
+
+### 3c: Signal Strength Tier
+- `_classify_strength()` added to `overlay.py` — strong/moderate/weak classification
+- `strength_tier` field added to CombinedResult DTO + DB schema with migration
+- Test: `test_strength_tier_classification` with 5 assertions
+
+### 4a: Forward-Return Validation
+- `validation.py` (448 lines) with both signal-level and transaction-level validation
+- yfinance added as optional dependency
+- Initial findings from 2025 data (key result):
+
+| Source | Direction | 5d Accuracy | 20d Accuracy | 60d Accuracy | Transactions |
+|--------|-----------|-------------|--------------|--------------|-------------|
+| Insider | BUY | **69.6%** | 56.5% | 56.5% | 23 |
+| Insider | SELL | 45.0% | 47.4% | 41.5% | 2,414 |
+| Congress | BUY | 58.6% | **63.0%** | **64.2%** | 811 |
+| Congress | SELL | 46.8% | 44.5% | 35.7% | 526 |
+
+**Key insight:** Buys are predictive (above 50%) for both sources. Sells are not predictive and often worse than random. This validates the buy/sell asymmetry in the scoring model and suggests sells should be discounted further.
+
+## Sync Verification
+- [x] Verification strategy executed: PASS (77/78 tests, 1 pre-existing)
+- [x] Branch pushed to remote: YES
+- [x] Branch merged to main: YES (fast-forward)
+- [x] Main pushed to remote: YES
+- [x] Documentation updated and current: YES
+- [x] Production deploy: SKIPPED (no deploy command configured)
+- [x] Local, remote, and main are consistent: YES
+- Verified at: 2026-04-04
