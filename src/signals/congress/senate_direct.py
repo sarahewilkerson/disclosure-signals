@@ -37,8 +37,7 @@ from signals.core.versioning import (
     NORMALIZATION_METHOD_VERSION,
     RESOLUTION_METHOD_VERSION,
 )
-
-MINIMUM_CONGRESS_TRADE_AMOUNT = 15_000
+from signals.congress.constants import MINIMUM_CONGRESS_TRADE_AMOUNT
 
 
 @dataclass

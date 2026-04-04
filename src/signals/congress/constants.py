@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 
+MINIMUM_CONGRESS_TRADE_AMOUNT = 15_000
+
+
 AMOUNT_RANGES = {
     "$1,001 - $15,000": (1_001, 15_000),
     "$15,001 - $50,000": (15_001, 50_000),
