@@ -26,6 +26,8 @@ def test_live_senate_candidate_discovery_examples_are_non_signal_assets():
     cases = [
         ("GS Managed Structured Note Strategy S&P 500 Linked Note", None, None, AssetCategory.CORPORATE_BOND, False),
         ("GS Managed Structured Note Strategy MSCI EAFE Linked Note", None, None, AssetCategory.CORPORATE_BOND, False),
+        ("JPMorgan Chase Floating Rate Note due 2030", None, None, AssetCategory.CORPORATE_BOND, False),
+        ("Bank of America Fixed-to-Floating Rate Senior Notes due 2034", None, None, AssetCategory.CORPORATE_BOND, False),
         ("ALLEGHENY CNTY PA ARPT AUTH ARPT REVRate/Coupon:5.5%Matures:2050-01-01", None, None, AssetCategory.MUNICIPAL_BOND, False),
         ("PARKLAND PA SCH DIST GORate/Coupon:5%Matures:2033-02-01", None, None, AssetCategory.MUNICIPAL_BOND, False),
         ("PENNSYLVANIA ST GORate/Coupon:5%Matures:2035-04-01", None, None, AssetCategory.MUNICIPAL_BOND, False),
@@ -34,6 +36,8 @@ def test_live_senate_candidate_discovery_examples_are_non_signal_assets():
         ("Pfizer Inc 717081FE8Rate/Coupon:4.500%Matures:2032-11-15", None, None, AssetCategory.CORPORATE_BOND, False),
         ("PHILADELPHIA PA WTR & WASTEWTR REV BDSRate/Coupon:5.25%Matures:2054-09-01", None, None, AssetCategory.MUNICIPAL_BOND, False),
         ("UPPER DUBLIN PA SCH DIST GORate/Coupon:4%Matures:2032-05-15", None, None, AssetCategory.MUNICIPAL_BOND, False),
+        ("New York City General Obligation Bonds Series 2028", None, None, AssetCategory.MUNICIPAL_BOND, False),
+        ("California Municipal Revenue Refunding Bonds 2036", None, None, AssetCategory.MUNICIPAL_BOND, False),
     ]
 
     for asset_name, ticker, asset_type, expected_category, include in cases:

@@ -48,10 +48,16 @@ MUNI_PATTERNS = [
     r"\bgo\b.*(?:call|bond|bds)",
     r"\bgo(?=rate/coupon|\b)",
     r"municipal",
+    r"general\s+obligation",
     r"\bst\b.*(?:sales|tax|rev)",
     r"city\s+(?:&|and)",
     r"county\s+(?:&|and)",
+    r"authority.*\brev\b",
+    r"airport.*\brev\b",
+    r"water(?:\s*&\s*|\s+and\s+)?wastew(?:ater|tr)\s+\brev\b",
+    r"school\s+dist(?:rict)?",
     r"rev(?:enue)?\s+(?:bond|jr)",
+    r"revenue\s+refunding",
     r"\brev(?=rate/coupon|\b)",
     r"utx\s+due",
     r"\bn\s*y\b.*\bgo\b",
@@ -68,7 +74,18 @@ MUNI_PATTERNS = [
 PRIVATE_PATTERNS = [r",\s*llc\b", r",\s*lp\b", r"promissory\s+note", r"private\s+equity", r"venture\s+fund", r"capital\s+fund", r"partners?\s+llc", r"allocate\s+\d{4}\s+lp"]
 MUTUAL_FUND_PATTERNS = [r"\bfund\b(?!.*etf)", r"portfolio", r"retirement", r"401k", r"ira\s+", r"target\s+date", r"money\s+market", r"admiral\s+shares", r"\binstl\b", r"\binst!\b", r"harding\s+loevner", r"dimensional", r"\bdfa\b", r"core\s+equity"]
 ETF_NAME_PATTERNS = [r"\betf\b", r"spdr", r"invesco\s+qqq", r"dow\s+jones", r"trust\s+nysearca", r"total\s+stock\s+market"]
-CORPORATE_BOND_PATTERNS = [r"structured\s+note", r"linked\s+note", r"hybrid\s+perpetual", r"rate/coupon", r"matures:\d", r"\b\d{6}[a-z0-9]{2}\b"]
+CORPORATE_BOND_PATTERNS = [
+    r"structured\s+note",
+    r"linked\s+note",
+    r"floating\s+rate\s+note",
+    r"fixed(?:\s+|-)?to(?:\s+|-)?floating",
+    r"senior\s+notes?",
+    r"subordinated\s+notes?",
+    r"hybrid\s+perpetual",
+    r"rate/coupon",
+    r"matures:\d",
+    r"\b\d{6}[a-z0-9]{2}\b",
+]
 CRYPTO_PATTERNS = [r"bitcoin", r"ethereum", r"crypto", r"blockchain", r"digital\s+asset"]
 
 
