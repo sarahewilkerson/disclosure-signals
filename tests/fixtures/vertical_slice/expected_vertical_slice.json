@@ -2,8 +2,8 @@
   "normalized_count": 3,
   "source_scores": {
     "insider:entity:aapl": {
-      "label": "bullish",
-      "score": 0.7616
+      "label": "insufficient",
+      "score": 0.0
     },
     "congress:entity:aapl": {
       "label": "bullish",

@@ -94,3 +94,31 @@ def test_congress_transaction_and_aggregate_parity():
 
     direct_conf = direct_congress_engine.compute_confidence_score(direct_aggregate, 1.0)
     assert math.isclose(direct_conf["composite_score"], expected_conf["composite_score"], rel_tol=1e-9, abs_tol=1e-9)
+
+
+def test_single_transaction_returns_insufficient():
+    """Single insider transaction should produce 'insufficient' signal."""
+    reference_date = datetime(2026, 4, 2)
+    txn = {
+        "transaction_code": "P",
+        "role_class": "ceo",
+        "is_likely_planned": 0,
+        "ownership_nature": "D",
+        "pct_holdings_changed": 0.05,
+        "transaction_date": "2026-03-01",
+        "cik_owner": "owner-1",
+        "total_value": 50000.0,
+    }
+    scored = [{**txn, **direct_insider_engine.score_transaction(txn, reference_date)}]
+    result = direct_insider_engine.aggregate_company_signal(scored, 90)
+    assert result["signal"] == "insufficient"
+    assert result["score"] == 0.0
+    assert result["confidence"] == 0.0
+
+
+def test_congress_single_txn_insufficient():
+    """Congress label_from_score with single transaction should return 'insufficient'."""
+    assert direct_congress_engine.label_from_score(0.5, 0.8, transaction_count=1) == "insufficient"
+    assert direct_congress_engine.label_from_score(0.5, 0.8, transaction_count=0) == "insufficient"
+    assert direct_congress_engine.label_from_score(0.5, 0.8, transaction_count=2) == "bullish"
+    assert direct_congress_engine.label_from_score(-0.5, 0.8, transaction_count=2) == "bearish"

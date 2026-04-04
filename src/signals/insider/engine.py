@@ -120,8 +120,11 @@ def score_transaction(txn: dict, reference_date: datetime) -> dict:
     }
 
 
+MIN_TRANSACTIONS_FOR_SIGNAL = 2
+
+
 def aggregate_company_signal(scored: list[dict], window_days: int) -> dict:
-    if not scored:
+    if len(scored) < MIN_TRANSACTIONS_FOR_SIGNAL:
         return {
             "signal": "insufficient",
             "score": 0.0,
@@ -131,7 +134,7 @@ def aggregate_company_signal(scored: list[dict], window_days: int) -> dict:
             "sell_count": 0,
             "unique_buyers": 0,
             "unique_sellers": 0,
-            "explanation": "No qualifying insider transactions in this window.",
+            "explanation": "Insufficient qualifying insider transactions in this window.",
             "window_days": window_days,
         }
     score, insider_contributions = _aggregate_with_saturation(scored)

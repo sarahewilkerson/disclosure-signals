@@ -249,8 +249,11 @@ def compute_confidence_score(aggregate: AggregateResult, resolution_rate: float,
     return {"composite_score": composite, "tier": tier, "factors": factors, "weights": weights}
 
 
-def label_from_score(score: float, confidence: float) -> str:
-    if confidence < 0.25:
+MIN_TRANSACTIONS_FOR_SIGNAL = 2
+
+
+def label_from_score(score: float, confidence: float, transaction_count: int = 0) -> str:
+    if confidence < 0.25 or transaction_count < MIN_TRANSACTIONS_FOR_SIGNAL:
         return "insufficient"
     if score > 0.05:
         return "bullish"
@@ -280,7 +283,7 @@ def compute_entity_signal(
         scope="entity",
         subject_key=subject_key,
         score=float(score),
-        label=label_from_score(score, confidence),
+        label=label_from_score(score, confidence, included_count),
         confidence=float(confidence),
         as_of_date=as_of_date,
         lookback_window=lookback_window,
