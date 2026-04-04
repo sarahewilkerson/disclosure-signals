@@ -1,0 +1,64 @@
+# Plan: Signal Strength Tiers + Forward-Return Validation
+
+**Date:** 2026-04-04
+**Status:** Planned
+**Scope:** Units 3c + 4a (signal strength tier + forward-return validation)
+**Depends on:** Units 0-3 complete (all merged to main)
+
+---
+
+## Context
+
+Units 0-3 built the scoring pipeline and noise reduction. The system now produces 4 combined results and 390 insider + 236 congress signals. The critical gap identified in the substantive signal review: "You have zero validation of whether your signals predict anything." Every parameter choice is unvalidated intuition.
+
+This cycle adds:
+1. **Signal strength tiers** (3c) — classify combined results as strong/moderate/weak for filtering
+2. **Forward-return validation** (4a) — fetch price data and compute correlation with signal scores
+
+Unit 3b (execution-date window alignment) is deferred — with only 4 combined results, further reducing overlap is counterproductive.
+
+---
+
+## Completion Criteria
+
+### 3c: Signal Strength Tier
+- `CombinedResult` has `strength_tier` field populated for all results
+- Tier logic: "strong" (both confidence >= 0.7, score magnitude > 0.3), "moderate" (both non-insufficient, confidence >= 0.4), "weak" (otherwise)
+- Unit test verifying tier classification
+
+### 4a: Forward-Return Validation
+- Script that loads signal results, fetches forward returns via yfinance, and outputs a validation report
+- Report includes: directional accuracy (% of bullish signals with positive forward returns), score-return correlation, per-window analysis (30/90/180 day signals)
+- Located in `src/signals/analysis/` to match existing analysis module pattern
+- Does NOT change scoring logic — this is measurement only
+
+---
+
+## Execution Sequence
+
+1. Commit this plan document
+2. Create branch `feat/strength-tiers-and-validation`
+3. **3c:** Add strength_tier to overlay.py, update CombinedResult, add test
+4. **4a:** Install yfinance, add validation script, run against current DB
+5. Bump versions, run tests, commit
+
+---
+
+## Risks
+
+- **yfinance rate limiting:** Yahoo Finance API may throttle. Mitigation: batch requests, cache results.
+- **Price data availability:** Some tickers may not have data for the signal date range. Handle gracefully with "N/A" in report.
+- **Forward-return interpretation:** Signal dates are `as_of_date` which is the reference date, not necessarily when the signal was "actionable." Must use execution dates from underlying transactions for proper timing.
+
+---
+
+## Files to Modify
+
+| File | Change |
+|------|--------|
+| `src/signals/combined/overlay.py` | Add strength_tier to CombinedResult construction |
+| `src/signals/core/dto.py` | Add `strength_tier` field to CombinedResult |
+| `src/signals/core/derived_db.py` | Add strength_tier column |
+| `src/signals/analysis/validation.py` | New: forward-return validation script |
+| `tests/test_engine_parity.py` | Add strength tier test |
+| `pyproject.toml` | Add yfinance dependency |
