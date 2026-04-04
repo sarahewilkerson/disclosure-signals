@@ -56,3 +56,28 @@ Add `src/signals/analysis/sectors.py`:
 | `src/signals/analysis/daily_brief.py` | Add anomaly detection, sector integration |
 | `src/signals/analysis/sectors.py` | New: sector enrichment with caching |
 | `tests/test_engine_parity.py` | Test anomaly detection |
+
+---
+
+## Execution Results
+
+**Executed:** 2026-04-04
+**Branch:** `feat/anomaly-detection-and-sectors`
+**Commits:** 1
+
+### Results
+- **7a Anomaly detection:** Implemented `_find_anomalous_activity()` — flags first-time insider buying in 12+ months and elevated activity (>2x historical avg). Found: BR (Broadridge) has first insider buy in 12+ months.
+- **7b Sector enrichment:** `sectors.py` (159 lines) with yfinance fetching + SQLite caching. `build_sector_summary()` aggregates by sector. Results: Technology +5 net bullish, Healthcare +4, Consumer Cyclical +2.
+- **7c Integration:** Anomaly alerts section added to daily brief markdown. Sector summary available as separate render.
+- **Tests:** `test_daily_brief_anomaly_detection` verifies first-time buy flagging.
+- 80/81 tests pass (1 pre-existing).
+
+## Sync Verification
+- [x] Verification strategy executed: PASS
+- [x] Branch pushed to remote: YES
+- [x] Branch merged to main: YES
+- [x] Main pushed to remote: YES
+- [x] Documentation updated and current: YES
+- [x] Production deploy: SKIPPED
+- [x] Local, remote, and main are consistent: YES
+- Verified at: 2026-04-04
