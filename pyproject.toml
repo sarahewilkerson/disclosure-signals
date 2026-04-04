@@ -20,6 +20,9 @@ dependencies = [
 dev = [
   "pytest>=8.0.0",
 ]
+validation = [
+  "yfinance>=0.2.0",
+]
 
 [project.scripts]
 signals = "signals.cli:main"
