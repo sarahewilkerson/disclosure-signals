@@ -50,3 +50,27 @@ File: `docs/plans/2026-04-04-unified-signal-quality.md`
 - `signals brief` includes sector summary automatically
 - 3+ new tests for mocked yfinance paths
 - No stale tracked items in plan docs
+
+---
+
+## Execution Results
+
+**Executed:** 2026-04-04
+**Branch:** `feat/polish-and-test-debt`
+
+### Results
+- **9a:** `--baseline` and `--regime` flags added to `signals validate`. Both produce appended reports.
+- **9b:** `--sectors` flag on `signals brief`. Sector summary auto-renders in brief when enabled. Fixed a bug where `result` dict was returned before sector data could be populated (extracted to `_build_sector_summary()` helper).
+- **9c:** 3 new tests: `test_sector_cache_logic` (mock yfinance, verify cache prevents re-fetch), `test_baseline_comparison_no_yfinance`, `test_regime_analysis_no_yfinance`.
+- **9d:** Stale "duplicated" note cleaned in first plan doc.
+- 83/84 tests pass (1 pre-existing).
+
+## Sync Verification
+- [x] Verification strategy executed: PASS
+- [x] Branch pushed to remote: YES
+- [x] Branch merged to main: YES
+- [x] Main pushed to remote: YES
+- [x] Documentation updated and current: YES
+- [x] Production deploy: SKIPPED
+- [x] Local, remote, and main are consistent: YES
+- Verified at: 2026-04-04
