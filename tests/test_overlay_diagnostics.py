@@ -41,3 +41,21 @@ def test_overlay_diagnostics_reports_overlap_and_blocked_reasons():
     assert payload["blocked_reason_counts"]["MISSING_COUNTERPART"] == 1
     assert payload["blocked_outcome_counts"]["SINGLE_SOURCE_ONLY"] == 1
     assert payload["overlap_details"][0]["subject_key"] == "entity:aapl"
+
+
+def test_overlay_diagnostics_excludes_insufficient_zero_input_rows():
+    insider = [
+        _signal("insider", "entity:aapl", "insufficient", 0.0),
+        _signal("insider", "entity:amzn", "bullish", 0.5),
+    ]
+    insider[0].input_count = 0
+    insider[0].included_count = 0
+    congress = [
+        _signal("congress", "entity:aapl", "bearish", -1.0),
+        _signal("congress", "entity:amzn", "bullish", 0.7),
+    ]
+
+    payload = build_overlay_diagnostics(insider, congress, [])
+
+    assert payload["overlap_subject_count"] == 1
+    assert payload["overlap_subjects"] == ["entity:amzn"]

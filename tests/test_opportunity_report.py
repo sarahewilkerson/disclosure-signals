@@ -48,10 +48,44 @@ def test_build_overlap_opportunity_report_buckets_overlap_subjects():
 
     report = build_overlap_opportunity_report(insider, congress, combined, blocked)
 
-    assert report["overlap_subject_count"] == 3
+    assert report["overlap_subject_count"] == 2
     assert report["aligned_count"] == 1
-    assert report["blocked_ambiguity_count"] == 1
+    assert report["blocked_ambiguity_count"] == 0
     assert report["neutral_or_mixed_count"] == 1
+
+
+def test_build_overlap_opportunity_report_excludes_zero_input_insufficient_overlap():
+    insider = [
+        SignalResult(
+            source="insider",
+            scope="entity",
+            subject_key="entity:aapl",
+            score=0.0,
+            label="insufficient",
+            confidence=0.0,
+            as_of_date="2026-04-03",
+            lookback_window=90,
+            input_count=0,
+            included_count=0,
+            excluded_count=0,
+            explanation="test",
+            method_version="test",
+            code_version="test",
+            run_id="insider-run",
+            provenance_refs={},
+        ),
+        _row("insider", "entity:amzn", "neutral", -0.06),
+    ]
+    congress = [
+        _row("congress", "entity:aapl", "bearish", -1.0),
+        _row("congress", "entity:amzn", "bullish", 1.0),
+    ]
+
+    report = build_overlap_opportunity_report(insider, congress, [], [])
+
+    assert report["overlap_subject_count"] == 1
+    assert report["neutral_or_mixed_count"] == 1
+    assert report["insider_insufficient_count"] == 0
 
 
 def test_render_overlap_opportunity_markdown_contains_summary():

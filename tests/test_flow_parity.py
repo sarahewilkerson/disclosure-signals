@@ -65,6 +65,7 @@ def test_insider_form4_parse_to_score_parity():
     direct = direct_parse_form4_xml(fixture)
 
     assert direct["filing"]["cik_issuer"] == "0000320193"
+    assert direct["filing"]["issuer_name"] == "APPLE INC"
     assert direct["filing"]["owner_name"] == "DOE JOHN"
     assert len(direct["transactions"]) == 1
 

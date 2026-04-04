@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from signals.core.dto import SignalResult
+from signals.core.signal_filters import is_combine_candidate
 
 
 def build_overlap_opportunity_report(
@@ -11,8 +12,8 @@ def build_overlap_opportunity_report(
     combined_results: list[dict],
     blocked_rows: list[dict],
 ) -> dict[str, Any]:
-    insider_by_subject = {row.subject_key: row for row in insider_results if row.scope == "entity"}
-    congress_by_subject = {row.subject_key: row for row in congress_results if row.scope == "entity"}
+    insider_by_subject = {row.subject_key: row for row in insider_results if is_combine_candidate(row)}
+    congress_by_subject = {row.subject_key: row for row in congress_results if is_combine_candidate(row)}
     combined_by_subject = {row["subject_key"]: row for row in combined_results if isinstance(row, dict) and "subject_key" in row}
     blocked_by_subject = {row["subject_key"]: row for row in blocked_rows if isinstance(row, dict) and "subject_key" in row}
 

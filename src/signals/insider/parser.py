@@ -129,6 +129,7 @@ def parse_form4_xml(xml_path: str | Path) -> dict:
     cik_issuer = _text(issuer, "issuerCik")
     if cik_issuer:
         cik_issuer = cik_issuer.zfill(10)
+    issuer_name = _text(issuer, "issuerName")
 
     owner_elements = root.findall("reportingOwner")
     all_owners = []
@@ -159,6 +160,7 @@ def parse_form4_xml(xml_path: str | Path) -> dict:
 
     filing = {
         "cik_issuer": cik_issuer,
+        "issuer_name": issuer_name,
         "cik_owner": primary_owner.get("cik"),
         "owner_name": primary_owner.get("name"),
         "officer_title": primary_owner.get("officer_title"),

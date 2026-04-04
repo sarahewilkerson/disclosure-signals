@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from signals.core.dto import SignalResult
+from signals.core.signal_filters import is_combine_candidate
 
 
 def build_overlay_diagnostics(
@@ -8,8 +9,10 @@ def build_overlay_diagnostics(
     congress_results: list[SignalResult],
     blocked_rows: list[dict],
 ) -> dict:
-    insider_subjects = sorted({row.subject_key for row in insider_results if row.scope == "entity"})
-    congress_subjects = sorted({row.subject_key for row in congress_results if row.scope == "entity"})
+    insider_candidates = [row for row in insider_results if is_combine_candidate(row)]
+    congress_candidates = [row for row in congress_results if is_combine_candidate(row)]
+    insider_subjects = sorted({row.subject_key for row in insider_candidates})
+    congress_subjects = sorted({row.subject_key for row in congress_candidates})
     insider_set = set(insider_subjects)
     congress_set = set(congress_subjects)
     overlap = sorted(insider_set & congress_set)
@@ -23,8 +26,8 @@ def build_overlay_diagnostics(
         outcome = row.get("overlay_outcome") or "UNKNOWN"
         blocked_outcome_counts[outcome] = blocked_outcome_counts.get(outcome, 0) + 1
 
-    insider_by_subject = {row.subject_key: row for row in insider_results}
-    congress_by_subject = {row.subject_key: row for row in congress_results}
+    insider_by_subject = {row.subject_key: row for row in insider_candidates}
+    congress_by_subject = {row.subject_key: row for row in congress_candidates}
     overlap_details = [
         {
             "subject_key": subject,

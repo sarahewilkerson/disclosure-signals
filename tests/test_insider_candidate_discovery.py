@@ -83,3 +83,66 @@ def test_insider_candidate_discovery_groups_cik_only_rows(tmp_path):
             "reason_codes": {"<included>": 1},
         },
     ]
+
+
+def test_insider_candidate_discovery_excludes_role_filtered_rows(tmp_path):
+    db_path = tmp_path / "derived.db"
+    init_db(str(db_path))
+    run = make_run(
+        "direct_xml_score",
+        "insider",
+        "test-sha",
+        {},
+        {"normalization": "n", "resolution": "r", "score": "s"},
+    )
+
+    with get_connection(str(db_path)) as conn:
+        insert_run(conn, run)
+        insert_normalized(
+            conn,
+            NormalizedTransaction(
+                source="insider",
+                source_record_id="row-1",
+                source_filing_id="filing-1",
+                actor_id="owner",
+                actor_name="Owner",
+                actor_type="officer",
+                owner_type="direct",
+                entity_key="cik:0000001",
+                instrument_key=None,
+                ticker=None,
+                issuer_name="Excluded Corp",
+                instrument_type="Common Stock",
+                transaction_type="purchase",
+                direction="BUY",
+                execution_date="2026-03-01",
+                disclosure_date="2026-03-02",
+                amount_low=1000.0,
+                amount_high=1000.0,
+                amount_estimate=1000.0,
+                currency="USD",
+                units_low=10.0,
+                units_high=10.0,
+                price_low=100.0,
+                price_high=100.0,
+                quality_score=1.0,
+                parse_confidence=1.0,
+                resolution_event_id="evt-1",
+                resolution_confidence=0.0,
+                resolution_method_version="r",
+                include_in_signal=False,
+                exclusion_reason_code="ENTITY_ROLE_EXCLUDED",
+                exclusion_reason_detail="Role excluded",
+                provenance_payload={},
+                normalization_method_version="n",
+                run_id=run.run_id,
+            ),
+        )
+
+        payload = build_insider_candidate_discovery(conn, run_id=run.run_id, limit=10)
+
+    assert payload == {
+        "run_id": run.run_id,
+        "candidate_count": 0,
+        "candidates": [],
+    }

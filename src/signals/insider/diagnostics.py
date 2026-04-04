@@ -19,6 +19,7 @@ def build_insider_candidate_discovery(
           AND run_id = ?
           AND ticker IS NULL
           AND entity_key LIKE 'cik:%'
+          AND include_in_signal = 1
         ORDER BY source_filing_id, source_record_id
         """,
         (run_id,),

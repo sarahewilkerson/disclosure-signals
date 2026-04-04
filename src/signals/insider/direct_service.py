@@ -91,7 +91,7 @@ def run_direct_xml_into_derived(repo_root: Path, derived_db_path: str, xml_dir: 
                     source_filing_id=filing_id,
                     ticker=None,
                     cik=filing.get("cik_issuer"),
-                    issuer_name=None,
+                    issuer_name=filing.get("issuer_name"),
                     instrument_type=txn.get("security_title"),
                     run_id=run.run_id,
                 )
@@ -116,7 +116,7 @@ def run_direct_xml_into_derived(repo_root: Path, derived_db_path: str, xml_dir: 
                     entity_key=resolution_event.entity_key or _subject_key(resolution_event.ticker, filing.get("cik_issuer")),
                     instrument_key=resolution_event.instrument_key,
                     ticker=resolution_event.ticker,
-                    issuer_name=resolution_event.issuer_name,
+                    issuer_name=resolution_event.issuer_name or filing.get("issuer_name"),
                     instrument_type=txn.get("security_title"),
                     transaction_type=classify_transaction_type(txn.get("transaction_code")),
                     direction="BUY" if txn.get("transaction_code") == "P" else "SELL" if txn.get("transaction_code") == "S" else "NEUTRAL",

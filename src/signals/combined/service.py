@@ -19,6 +19,7 @@ from signals.core.derived_db import (
 from signals.core.dto import SignalResult
 from signals.core.git import git_sha
 from signals.core.runs import make_run, utcnow_iso
+from signals.core.signal_filters import is_combine_candidate
 from signals.core.versioning import COMBINE_METHOD_VERSION
 
 
@@ -37,18 +38,15 @@ class CombinedBuildResult:
 def _typed_signal_rows(rows: list[dict], lookback_window: int | None = None) -> list[SignalResult]:
     typed = []
     for row in rows:
-        if row["scope"] != "entity":
-            continue
-        if lookback_window is not None and int(row["lookback_window"]) != lookback_window:
-            continue
-        typed.append(
-            SignalResult(
-                **{
-                    **{k: row[k] for k in SignalResult.__dataclass_fields__.keys()},
-                    "provenance_refs": json.loads(row["provenance_refs"]),
-                }
-            )
+        typed_row = SignalResult(
+            **{
+                **{k: row[k] for k in SignalResult.__dataclass_fields__.keys()},
+                "provenance_refs": json.loads(row["provenance_refs"]),
+            }
         )
+        if not is_combine_candidate(typed_row, lookback_window=lookback_window):
+            continue
+        typed.append(typed_row)
     latest: dict[tuple[str, int], SignalResult] = {}
     for row in typed:
         latest[(row.subject_key, row.lookback_window)] = row
