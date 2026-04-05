@@ -879,6 +879,38 @@ def cmd_brief(args):
         print(render_daily_brief_markdown(brief))
 
 
+def cmd_backtest(args):
+    from signals.analysis.backtest import BacktestConfig, run_backtest, render_backtest_markdown
+    from signals.analysis.timeseries import compute_signal_stability, compute_signal_turnover, render_timeseries_markdown
+    config = BacktestConfig(
+        start_date=datetime.strptime(args.start, "%Y-%m-%d"),
+        end_date=datetime.strptime(args.end, "%Y-%m-%d"),
+        interval=args.interval,
+        insider_xml_dir=args.insider_xml_dir,
+        house_pdf_dir=args.house_pdf_dir,
+        senate_html_dir=args.senate_html_dir,
+        derived_db_path=args.db,
+        lookback_window=args.window,
+    )
+
+    def _progress(stage, payload):
+        if stage == "backtest_date_start":
+            print(f"[{payload['index']+1}/{payload['total']}] Scoring at {payload['date']}...", end=" ", flush=True)
+        elif stage == "backtest_date_done":
+            print(f"done ({payload['duration']:.1f}s, insider={payload['insider']}, congress={payload['congress']}, combined={payload['combined']})")
+
+    result = run_backtest(config, progress_callback=_progress)
+
+    if args.format == "json":
+        print(json.dumps(result.to_dict(), indent=2))
+    else:
+        print(render_backtest_markdown(result))
+        if result.run_ids_by_date:
+            stability = compute_signal_stability(args.db, result.run_ids_by_date)
+            turnover = compute_signal_turnover(args.db, result.run_ids_by_date)
+            print(render_timeseries_markdown(stability, turnover))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="signals")
     parser.add_argument("--db", default=str(default_derived_db()))
@@ -1144,6 +1176,16 @@ def build_parser() -> argparse.ArgumentParser:
     brief.add_argument("--date", default=None, help="Reference date YYYY-MM-DD (default: today)")
     brief.add_argument("--sectors", action="store_true", help="Include sector summary (requires yfinance)")
     brief.set_defaults(func=cmd_brief)
+
+    backtest = subparsers.add_parser("backtest", help="Run historical time-series backtest")
+    backtest.add_argument("--start", required=True, help="Start date YYYY-MM-DD")
+    backtest.add_argument("--end", required=True, help="End date YYYY-MM-DD")
+    backtest.add_argument("--interval", default="monthly", choices=["monthly", "biweekly"], help="Date interval")
+    backtest.add_argument("--insider-xml-dir", required=True, help="Path to cached insider XML files")
+    backtest.add_argument("--house-pdf-dir", required=True, help="Path to cached House PDF files")
+    backtest.add_argument("--senate-html-dir", required=True, help="Path to cached Senate HTML files")
+    backtest.add_argument("--window", type=int, default=90, help="Lookback window in days")
+    backtest.set_defaults(func=cmd_backtest)
 
     return parser
 
