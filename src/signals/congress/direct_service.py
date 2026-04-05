@@ -116,6 +116,14 @@ def run_direct_house_pdfs_into_derived(
     skip_reasons: dict[str, int] = defaultdict(int)
 
     try:
+        # Load committee membership data (cached, non-blocking if unavailable)
+        try:
+            from signals.congress.committees import load_members, resolve_filer, get_committee_sectors, check_committee_sector_match
+            from signals.analysis.sectors import get_sector_map
+            committee_members = load_members()
+        except Exception:
+            committee_members = []
+
         for pdf_path in pdf_files:
             filing, skip_reason = parse_house_pdf_text_only(repo_root, pdf_path)
             if filing is None:
@@ -224,6 +232,25 @@ def run_direct_house_pdfs_into_derived(
                     normalization_method_version=NORMALIZATION_METHOD_VERSION,
                     run_id=run.run_id,
                 )
+                # Enrich with committee data if available
+                if committee_members and filing.filer_name:
+                    bioguide = resolve_filer(filing.filer_name, None, committee_members)
+                    if bioguide:
+                        member = next((m for m in committee_members if m.bioguide_id == bioguide), None)
+                        if member:
+                            committee_sectors = get_committee_sectors(member.committees)
+                            stock_sector = None
+                            if normalized.ticker:
+                                try:
+                                    sector_map = get_sector_map([normalized.ticker])
+                                    stock_sector = sector_map.get(normalized.ticker.upper(), {}).get("sector")
+                                except Exception:
+                                    pass
+                            normalized.provenance_payload["bioguide_id"] = bioguide
+                            normalized.provenance_payload["committees"] = [c["code"] for c in member.committees if len(c["code"]) <= 4]
+                            normalized.provenance_payload["committee_sectors"] = committee_sectors
+                            normalized.provenance_payload["committee_sector_match"] = check_committee_sector_match(committee_sectors, stock_sector)
+
                 normalized_rows.append(normalized)
 
                 if not include or not normalized.ticker:

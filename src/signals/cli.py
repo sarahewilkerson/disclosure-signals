@@ -872,7 +872,7 @@ def cmd_validate(args):
 def cmd_brief(args):
     from signals.analysis.daily_brief import build_daily_brief, render_daily_brief_markdown
     reference_date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else datetime.now()
-    brief = build_daily_brief(args.db, reference_date=reference_date, include_sectors=args.sectors)
+    brief = build_daily_brief(args.db, reference_date=reference_date, include_sectors=args.sectors, include_committees=getattr(args, 'committees', False))
     if args.format == "json":
         print(json.dumps(brief, indent=2))
     else:
@@ -1175,6 +1175,7 @@ def build_parser() -> argparse.ArgumentParser:
     brief = subparsers.add_parser("brief", help="Generate high-signal daily brief")
     brief.add_argument("--date", default=None, help="Reference date YYYY-MM-DD (default: today)")
     brief.add_argument("--sectors", action="store_true", help="Include sector summary (requires yfinance)")
+    brief.add_argument("--committees", action="store_true", help="Include committee-correlated trades (requires congress.gov API key)")
     brief.set_defaults(func=cmd_brief)
 
     backtest = subparsers.add_parser("backtest", help="Run historical time-series backtest")

@@ -15,6 +15,7 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass
@@ -74,6 +75,7 @@ def build_daily_brief(
     cluster_threshold: int = 2,
     lookback_days: int = 30,
     include_sectors: bool = False,
+    include_committees: bool = False,
 ) -> dict:
     """Build a high-signal daily brief from the derived database.
 
@@ -122,6 +124,7 @@ def build_daily_brief(
         "sector_summary": _build_sector_summary(
             db_path, strong_insider, strong_congress, cross_source, cluster_alerts
         ) if include_sectors else None,
+        "committee_correlated_trades": _build_committee_correlation(db_path) if include_committees else None,
     }
 
 
@@ -148,6 +151,35 @@ def _build_sector_summary(
         sector_map = get_sector_map(list(tickers))
         return build_sector_summary(db_path, sector_map)
     except ImportError:
+        return None
+
+
+def _build_committee_correlation(db_path: str) -> list[dict] | None:
+    """Find trades where member's committee sector matches the traded stock's sector."""
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT ticker, actor_name, provenance_payload, direction FROM normalized_transactions WHERE source = 'congress' AND include_in_signal = 1"
+        ).fetchall()
+        conn.close()
+
+        correlated = []
+        for row in rows:
+            try:
+                payload = json.loads(row["provenance_payload"]) if isinstance(row["provenance_payload"], str) else row["provenance_payload"]
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if payload.get("committee_sector_match"):
+                correlated.append({
+                    "ticker": row["ticker"],
+                    "actor_name": row["actor_name"],
+                    "direction": row["direction"],
+                    "committees": payload.get("committees", []),
+                    "committee_sectors": payload.get("committee_sectors", []),
+                })
+        return correlated if correlated else None
+    except Exception:
         return None
 
 
@@ -499,6 +531,15 @@ def render_daily_brief_markdown(brief: dict) -> str:
         for sector, data in sorted(sector_summary.items(), key=lambda x: abs(x[1]["net_sentiment"]), reverse=True):
             top = ", ".join(data["top_tickers"][:3])
             lines.append(f"| {sector} | {data['bullish_count']} | {data['bearish_count']} | {data['net_sentiment']:+d} | {top} |")
+        lines.append("")
+
+    # Committee-correlated trades
+    committee_trades = brief.get("committee_correlated_trades")
+    if committee_trades:
+        lines.extend(["## Committee-Correlated Trades", "", "Trades where member's committee jurisdiction matches the stock's sector.", ""])
+        for ct in committee_trades[:10]:
+            committees = ", ".join(ct.get("committees", [])[:3])
+            lines.append(f"- **{ct['ticker']}** ({ct['direction']}) by {ct.get('actor_name', '?')} — committees: {committees}")
         lines.append("")
 
     if not alerts and not cross and not insider and not congress and not anomalies:
