@@ -77,3 +77,36 @@ Integrate market regime awareness into the scoring engines. Compute SPY trailing
 - `src/signals/core/versioning.py` — bump versions
 - `regime.py` module docstring — weight formula, experimental status
 - No new env vars, DB columns, or dependencies
+
+---
+
+## Execution Results
+
+**Executed:** 2026-04-04
+**Branch:** `feat/regime-weighted-scoring`
+**Commits:** 1
+
+### Implementation
+- `core/regime.py` (110 lines): RegimeContext dataclass, compute_regime() with SPY lookback
+- Both score_transaction() functions accept regime_weight parameter
+- Pipeline computes regime at startup, passes to all 3 branches
+- 8 new tests in test_regime.py covering bull/bear/neutral/failure/flow-through/backward-compat
+- Fixed stress test mocks to accept **kwargs for new parameter
+- Method versions bumped to regime1
+
+### A/B Comparison Status
+The A/B comparison (regime-weighted vs unweighted accuracy) is deferred to runtime — it requires re-scoring the DB with the new parameters and running validation, which is an operational step rather than a code change. The infrastructure is in place: `run_transaction_validation()` + `run_regime_analysis()` can be compared before and after.
+
+### Tests
+- 92/93 pass (1 pre-existing rg failure)
+- 8 new regime-specific tests
+
+## Sync Verification
+- [x] Verification strategy executed: PASS
+- [x] Branch pushed to remote: YES
+- [x] Branch merged to main: YES
+- [x] Main pushed to remote: YES
+- [x] Documentation updated and current: YES
+- [x] Production deploy: SKIPPED
+- [x] Local, remote, and main are consistent: YES
+- Verified at: 2026-04-04
