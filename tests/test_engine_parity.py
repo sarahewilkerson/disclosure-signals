@@ -522,3 +522,214 @@ def test_participation_index():
         assert result["count"] == 3
         assert result["universe_size"] == 504
         assert math.isclose(result["rate"], 3 / 504, abs_tol=0.001)
+
+
+def test_earnings_proximity_alerts(monkeypatch):
+    """F3: Pre-earnings insider buys should be flagged."""
+    import tempfile
+    from signals.core.derived_db import init_db, get_connection, insert_normalized, insert_run
+    from signals.core.dto import NormalizedTransaction
+    from signals.core.runs import make_run
+    from signals.analysis.daily_brief import _find_earnings_proximity_alerts
+
+    with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
+        db_path = tmp.name
+        init_db(db_path)
+        run = make_run("test", "insider", "test", {}, {})
+        with get_connection(db_path) as conn:
+            insert_run(conn, run)
+            insert_normalized(conn, NormalizedTransaction(
+                source="insider", source_record_id="ep:1", source_filing_id="f1",
+                actor_id="cik-1", actor_name="CEO Test", actor_type="ceo",
+                owner_type="direct", entity_key="entity:test", instrument_key=None,
+                ticker="TEST", issuer_name="Test Corp", instrument_type="ST",
+                transaction_type="open_market_buy", direction="BUY",
+                execution_date="2026-03-20", disclosure_date="2026-03-21",
+                amount_low=50000.0, amount_high=50000.0, amount_estimate=50000.0,
+                currency="USD", units_low=100.0, units_high=100.0,
+                price_low=500.0, price_high=500.0,
+                quality_score=1.0, parse_confidence=1.0,
+                resolution_event_id=None, resolution_confidence=0.99,
+                resolution_method_version="test",
+                include_in_signal=True, exclusion_reason_code=None,
+                exclusion_reason_detail=None,
+                provenance_payload={}, normalization_method_version="test",
+                run_id=run.run_id,
+            ))
+
+        # Mock yfinance to return earnings 15 days after the buy
+        class FakeTicker:
+            def __init__(self, ticker):
+                self.calendar = {"Earnings Date": [datetime(2026, 4, 4)]}
+
+        import signals.analysis.daily_brief as brief_mod
+        monkeypatch.setattr("yfinance.Ticker", FakeTicker)
+
+        with get_connection(db_path) as conn:
+            alerts = _find_earnings_proximity_alerts(conn, datetime(2026, 4, 5))
+
+        assert len(alerts) == 1
+        assert alerts[0]["ticker"] == "TEST"
+        assert alerts[0]["days_to_earnings"] == 15
+
+
+def test_earnings_proximity_no_calendar(monkeypatch):
+    """F3: Missing earnings calendar should return empty list gracefully."""
+    import tempfile
+    from signals.core.derived_db import init_db, get_connection, insert_normalized, insert_run
+    from signals.core.dto import NormalizedTransaction
+    from signals.core.runs import make_run
+    from signals.analysis.daily_brief import _find_earnings_proximity_alerts
+
+    with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
+        db_path = tmp.name
+        init_db(db_path)
+        run = make_run("test", "insider", "test", {}, {})
+        with get_connection(db_path) as conn:
+            insert_run(conn, run)
+            insert_normalized(conn, NormalizedTransaction(
+                source="insider", source_record_id="ep:2", source_filing_id="f2",
+                actor_id="cik-2", actor_name="CFO Test", actor_type="cfo",
+                owner_type="direct", entity_key="entity:nocal", instrument_key=None,
+                ticker="NOCAL", issuer_name="NoCal Corp", instrument_type="ST",
+                transaction_type="open_market_buy", direction="BUY",
+                execution_date="2026-03-20", disclosure_date="2026-03-21",
+                amount_low=50000.0, amount_high=50000.0, amount_estimate=50000.0,
+                currency="USD", units_low=100.0, units_high=100.0,
+                price_low=500.0, price_high=500.0,
+                quality_score=1.0, parse_confidence=1.0,
+                resolution_event_id=None, resolution_confidence=0.99,
+                resolution_method_version="test",
+                include_in_signal=True, exclusion_reason_code=None,
+                exclusion_reason_detail=None,
+                provenance_payload={}, normalization_method_version="test",
+                run_id=run.run_id,
+            ))
+
+        class FakeTickerNoCalendar:
+            def __init__(self, ticker):
+                self.calendar = None
+
+        monkeypatch.setattr("yfinance.Ticker", FakeTickerNoCalendar)
+
+        with get_connection(db_path) as conn:
+            alerts = _find_earnings_proximity_alerts(conn, datetime(2026, 4, 5))
+
+        assert alerts == []
+
+
+def test_committee_rotation_detection():
+    """F4: Direction flip should be detected as a rotation signal."""
+    import tempfile
+    from signals.core.derived_db import init_db, get_connection, insert_normalized, insert_run
+    from signals.core.dto import NormalizedTransaction
+    from signals.core.runs import make_run
+    from signals.analysis.daily_brief import _find_committee_rotation_signals
+
+    with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
+        db_path = tmp.name
+        init_db(db_path)
+        run = make_run("test", "congress", "test", {}, {})
+        with get_connection(db_path) as conn:
+            insert_run(conn, run)
+            # Prior period: 3 buys, 1 sell (net BUY) for banking committee
+            for i in range(3):
+                insert_normalized(conn, NormalizedTransaction(
+                    source="congress", source_record_id=f"cr:buy:{i}", source_filing_id="f1",
+                    actor_id=f"member-{i}", actor_name=f"Senator {i}", actor_type="senator",
+                    owner_type="self", entity_key="entity:jpm", instrument_key=None,
+                    ticker="JPM", issuer_name="JPMorgan", instrument_type="ST",
+                    transaction_type="purchase", direction="BUY",
+                    execution_date="2025-11-01", disclosure_date="2025-12-01",
+                    amount_low=15001.0, amount_high=50000.0, amount_estimate=30000.0,
+                    currency="USD", units_low=None, units_high=None,
+                    price_low=None, price_high=None,
+                    quality_score=1.0, parse_confidence=1.0,
+                    resolution_event_id=None, resolution_confidence=0.95,
+                    resolution_method_version="test",
+                    include_in_signal=True, exclusion_reason_code=None,
+                    exclusion_reason_detail=None,
+                    provenance_payload={
+                        "committees": ["ssba"],
+                        "committee_sectors": ["Financials"],
+                        "committee_sector_match": True,
+                    },
+                    normalization_method_version="test", run_id=run.run_id,
+                ))
+            insert_normalized(conn, NormalizedTransaction(
+                source="congress", source_record_id="cr:sell:prior", source_filing_id="f1",
+                actor_id="member-3", actor_name="Senator 3", actor_type="senator",
+                owner_type="self", entity_key="entity:jpm", instrument_key=None,
+                ticker="JPM", issuer_name="JPMorgan", instrument_type="ST",
+                transaction_type="sale", direction="SELL",
+                execution_date="2025-11-15", disclosure_date="2025-12-15",
+                amount_low=15001.0, amount_high=50000.0, amount_estimate=30000.0,
+                currency="USD", units_low=None, units_high=None,
+                price_low=None, price_high=None,
+                quality_score=1.0, parse_confidence=1.0,
+                resolution_event_id=None, resolution_confidence=0.95,
+                resolution_method_version="test",
+                include_in_signal=True, exclusion_reason_code=None,
+                exclusion_reason_detail=None,
+                provenance_payload={
+                    "committees": ["ssba"],
+                    "committee_sectors": ["Financials"],
+                    "committee_sector_match": True,
+                },
+                normalization_method_version="test", run_id=run.run_id,
+            ))
+            # Recent period: 1 buy, 3 sells (net SELL) — direction flipped!
+            insert_normalized(conn, NormalizedTransaction(
+                source="congress", source_record_id="cr:buy:recent", source_filing_id="f2",
+                actor_id="member-0", actor_name="Senator 0", actor_type="senator",
+                owner_type="self", entity_key="entity:jpm", instrument_key=None,
+                ticker="JPM", issuer_name="JPMorgan", instrument_type="ST",
+                transaction_type="purchase", direction="BUY",
+                execution_date="2026-03-20", disclosure_date="2026-04-01",
+                amount_low=15001.0, amount_high=50000.0, amount_estimate=30000.0,
+                currency="USD", units_low=None, units_high=None,
+                price_low=None, price_high=None,
+                quality_score=1.0, parse_confidence=1.0,
+                resolution_event_id=None, resolution_confidence=0.95,
+                resolution_method_version="test",
+                include_in_signal=True, exclusion_reason_code=None,
+                exclusion_reason_detail=None,
+                provenance_payload={
+                    "committees": ["ssba"],
+                    "committee_sectors": ["Financials"],
+                    "committee_sector_match": True,
+                },
+                normalization_method_version="test", run_id=run.run_id,
+            ))
+            for i in range(3):
+                insert_normalized(conn, NormalizedTransaction(
+                    source="congress", source_record_id=f"cr:sell:recent:{i}", source_filing_id="f2",
+                    actor_id=f"member-{i+4}", actor_name=f"Senator {i+4}", actor_type="senator",
+                    owner_type="self", entity_key="entity:jpm", instrument_key=None,
+                    ticker="JPM", issuer_name="JPMorgan", instrument_type="ST",
+                    transaction_type="sale", direction="SELL",
+                    execution_date="2026-03-25", disclosure_date="2026-04-05",
+                    amount_low=15001.0, amount_high=50000.0, amount_estimate=30000.0,
+                    currency="USD", units_low=None, units_high=None,
+                    price_low=None, price_high=None,
+                    quality_score=1.0, parse_confidence=1.0,
+                    resolution_event_id=None, resolution_confidence=0.95,
+                    resolution_method_version="test",
+                    include_in_signal=True, exclusion_reason_code=None,
+                    exclusion_reason_detail=None,
+                    provenance_payload={
+                        "committees": ["ssba"],
+                        "committee_sectors": ["Financials"],
+                        "committee_sector_match": True,
+                    },
+                    normalization_method_version="test", run_id=run.run_id,
+                ))
+
+        with get_connection(db_path) as conn:
+            rotations = _find_committee_rotation_signals(conn, datetime(2026, 4, 5))
+
+        assert len(rotations) >= 1
+        ssba = next((r for r in rotations if r["committee_code"] == "SSBA"), None)
+        assert ssba is not None
+        assert ssba["prior_direction"] == "BUY"
+        assert ssba["recent_direction"] == "SELL"
