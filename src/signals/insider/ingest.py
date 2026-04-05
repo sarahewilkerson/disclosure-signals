@@ -4,6 +4,7 @@ import csv
 import hashlib
 import json
 import os
+import random
 import re
 import time
 import xml.etree.ElementTree as ET
@@ -20,8 +21,8 @@ SEC_DATA_URL = "https://data.sec.gov"
 SEC_EFTS_URL = "https://efts.sec.gov/LATEST"
 SEC_ARCHIVES_URL = f"{SEC_BASE_URL}/Archives/edgar/data"
 SEC_COMPANY_TICKERS_URL = f"{SEC_BASE_URL}/files/company_tickers.json"
-SEC_RATE_LIMIT_DELAY = 0.12
-SEC_MAX_RETRIES = 3
+SEC_RATE_LIMIT_DELAY = 0.15
+SEC_MAX_RETRIES = 5
 INGEST_STATE_VERSION = 1
 
 
@@ -35,8 +36,9 @@ class DirectEdgarClient:
 
     def _throttle(self) -> None:
         elapsed = time.time() - self._last_request_time
-        if elapsed < SEC_RATE_LIMIT_DELAY:
-            time.sleep(SEC_RATE_LIMIT_DELAY - elapsed)
+        delay = SEC_RATE_LIMIT_DELAY + random.uniform(0.0, 0.05)  # jitter
+        if elapsed < delay:
+            time.sleep(delay - elapsed)
 
     def get(self, url: str, timeout: int = 30, retries: int | None = None) -> requests.Response:
         retries = retries if retries is not None else SEC_MAX_RETRIES
@@ -44,16 +46,22 @@ class DirectEdgarClient:
             self._throttle()
             resp = self.session.get(url, timeout=timeout)
             self._last_request_time = time.time()
+            if resp.status_code == 429:
+                # SEC rate limit hit — back off aggressively before retrying
+                retry_after = int(resp.headers.get("Retry-After", "10"))
+                jitter = random.uniform(0.5, 2.0)
+                time.sleep(retry_after + jitter)
             resp.raise_for_status()
             return resp
 
         return retry_call(
             _request,
             attempts=retries,
-            backoff_seconds=2.0,
+            backoff_seconds=3.0,
             retry_on=(requests.RequestException,),
             should_retry=lambda exc: not isinstance(exc, requests.HTTPError)
             or exc.response is None
+            or exc.response.status_code == 429
             or exc.response.status_code >= 500,
         )
 
