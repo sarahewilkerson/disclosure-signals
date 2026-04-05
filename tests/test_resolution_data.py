@@ -67,3 +67,41 @@ def test_resolve_entity_strips_short_ocr_prefix_tokens():
 
     assert event.entity_key == "entity:nvidia"
     assert event.ticker == "NVDA"
+
+
+def test_resolve_entity_ticker_passthrough():
+    """When ticker is provided but not in canonical CSV, trust it at 0.95 confidence."""
+    event = resolve_entity(
+        source="congress",
+        source_record_id="row-5",
+        source_filing_id="filing-5",
+        ticker="META",
+        cik=None,
+        issuer_name="Meta Platforms, Inc. - Class A",
+        instrument_type="ST",
+        run_id="run-5",
+    )
+
+    assert event.resolution_status == "RESOLVED"
+    assert event.resolution_confidence == 0.95
+    assert event.entity_key == "entity:meta"
+    assert event.ticker == "META"
+    assert event.evidence_payload["match_type"] == "ticker_passthrough"
+
+
+def test_resolve_entity_canonical_takes_priority_over_passthrough():
+    """Canonical CSV match (0.99) should take priority over passthrough (0.95)."""
+    event = resolve_entity(
+        source="congress",
+        source_record_id="row-6",
+        source_filing_id="filing-6",
+        ticker="AAPL",
+        cik=None,
+        issuer_name="Apple Inc.",
+        instrument_type="ST",
+        run_id="run-6",
+    )
+
+    assert event.resolution_confidence == 0.99
+    assert event.entity_key == "entity:apple"  # canonical, not "entity:aapl"
+    assert event.evidence_payload["match_type"] == "ticker"

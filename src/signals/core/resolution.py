@@ -107,6 +107,17 @@ def resolve_entity(
             confidence = 0.40
             evidence["match_type"] = "ambiguous_name"
             evidence["candidate_entity_keys"] = [item["entity_key"] for item in matches]
+        elif ticker:
+            # Trust caller-provided ticker when canonical DB has no entry
+            candidate = {
+                "entity_key": f"entity:{ticker.lower()}",
+                "instrument_key": None,
+                "ticker": ticker.upper(),
+                "issuer_name": issuer_name,
+            }
+            confidence = 0.95
+            status = ResolutionStatus.RESOLVED.value
+            evidence["match_type"] = "ticker_passthrough"
         else:
             status = ResolutionStatus.UNRESOLVED.value
             confidence = 0.0
