@@ -117,10 +117,10 @@ def test_single_transaction_returns_insufficient():
 
 
 def test_planned_trade_near_zero_signal():
-    """10b5-1 planned trades should produce ~5% of non-planned signal."""
+    """10b5-1 planned trades should produce ~5% of non-planned BUY signal."""
     reference_date = datetime(2026, 4, 2)
     base_txn = {
-        "transaction_code": "S",
+        "transaction_code": "P",
         "role_class": "ceo",
         "is_likely_planned": 0,
         "ownership_nature": "D",
@@ -136,6 +136,24 @@ def test_planned_trade_near_zero_signal():
 
     ratio = abs(planned_result["transaction_signal"]) / abs(normal_result["transaction_signal"])
     assert math.isclose(ratio, 0.05, rel_tol=1e-9)
+
+
+def test_sell_weight_is_zero():
+    """Sells should produce zero transaction_signal (validated as noise)."""
+    reference_date = datetime(2026, 4, 2)
+    txn = {
+        "transaction_code": "S",
+        "role_class": "ceo",
+        "is_likely_planned": 0,
+        "ownership_nature": "D",
+        "pct_holdings_changed": 0.05,
+        "transaction_date": "2026-03-01",
+        "cik_owner": "owner-1",
+        "total_value": 100000.0,
+    }
+    result = direct_insider_engine.score_transaction(txn, reference_date)
+    assert result["transaction_signal"] == 0.0
+    assert result["direction"] == 0.0
 
 
 def test_mixed_direction_no_bonus():
