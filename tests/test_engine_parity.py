@@ -447,3 +447,78 @@ def test_senate_filing_metadata_sidecar(tmp_path):
     other_path = tmp_path / "ptr_noexist.html"
     other_path.write_text("<html></html>")
     assert _read_filing_metadata(other_path) is None
+
+
+def test_cluster_conviction_amplifies_score():
+    """Multi-buyer cluster should produce higher score than single buyer."""
+    reference_date = datetime(2026, 4, 2)
+    base = {
+        "transaction_code": "P", "role_class": "ceo", "is_likely_planned": 0,
+        "ownership_nature": "D", "pct_holdings_changed": 0.05,
+        "transaction_date": "2026-03-01", "total_value": 50000.0,
+    }
+
+    # Single buyer: 2 buys from same person
+    single_buyer = [
+        {**base, "cik_owner": "owner-1", **direct_insider_engine.score_transaction(base, reference_date)},
+        {**base, "cik_owner": "owner-1", "transaction_date": "2026-03-02",
+         **direct_insider_engine.score_transaction({**base, "transaction_date": "2026-03-02"}, reference_date)},
+    ]
+
+    # Multi-buyer: 2 buys from different people (cluster)
+    multi_buyer = [
+        {**base, "cik_owner": "owner-1", **direct_insider_engine.score_transaction(base, reference_date)},
+        {**base, "cik_owner": "owner-2", "transaction_date": "2026-03-02",
+         **direct_insider_engine.score_transaction({**base, "transaction_date": "2026-03-02"}, reference_date)},
+    ]
+
+    multi_result = direct_insider_engine.aggregate_company_signal(multi_buyer, 90)
+
+    # Conviction multiplier should fire for 2 unique buyers
+    assert multi_result["unique_buyers"] == 2
+    assert multi_result["score"] > 0  # bullish (all buys)
+    assert -1.0 <= multi_result["score"] <= 1.0
+    # Verify CLUSTER_CONVICTION_BASE constant exists
+    assert direct_insider_engine.CLUSTER_CONVICTION_BASE == 0.25
+
+
+def test_participation_index():
+    """Participation index should count distinct tickers with insider buys."""
+    import tempfile
+    from signals.core.derived_db import init_db, get_connection, insert_normalized, insert_run
+    from signals.core.dto import NormalizedTransaction
+    from signals.core.runs import make_run
+
+    with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
+        db_path = tmp.name
+        init_db(db_path)
+        run = make_run("test", "insider", "test", {}, {})
+        with get_connection(db_path) as conn:
+            insert_run(conn, run)
+            for i, ticker in enumerate(["AAPL", "MSFT", "GOOG"]):
+                insert_normalized(conn, NormalizedTransaction(
+                    source="insider", source_record_id=f"pi:{i}", source_filing_id="f1",
+                    actor_id=f"cik-{i}", actor_name=f"CEO {ticker}", actor_type="ceo",
+                    owner_type="direct", entity_key=f"entity:{ticker.lower()}", instrument_key=None,
+                    ticker=ticker, issuer_name=f"{ticker} Corp", instrument_type="ST",
+                    transaction_type="open_market_buy", direction="BUY",
+                    execution_date="2026-03-15", disclosure_date="2026-03-16",
+                    amount_low=50000.0, amount_high=50000.0, amount_estimate=50000.0,
+                    currency="USD", units_low=100.0, units_high=100.0,
+                    price_low=500.0, price_high=500.0,
+                    quality_score=1.0, parse_confidence=1.0,
+                    resolution_event_id=None, resolution_confidence=0.99,
+                    resolution_method_version="test",
+                    include_in_signal=True, exclusion_reason_code=None,
+                    exclusion_reason_detail=None,
+                    provenance_payload={}, normalization_method_version="test",
+                    run_id=run.run_id,
+                ))
+
+        from signals.analysis.daily_brief import _compute_participation_index
+        with get_connection(db_path) as conn:
+            result = _compute_participation_index(conn, datetime(2026, 4, 5), window_days=90, universe_size=504)
+
+        assert result["count"] == 3
+        assert result["universe_size"] == 504
+        assert math.isclose(result["rate"], 3 / 504, abs_tol=0.001)

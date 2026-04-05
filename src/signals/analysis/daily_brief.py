@@ -108,7 +108,16 @@ def build_daily_brief(
     # 4. Anomaly detection: first-time buying or elevated activity
     anomalies = _find_anomalous_activity(conn, reference_date, lookback_days)
 
-    # 5. Summary stats
+    # 5. Insider Participation Index (market-level breadth)
+    participation = _compute_participation_index(conn, reference_date)
+
+    # 6. Earnings proximity alerts
+    earnings_alerts = _find_earnings_proximity_alerts(conn, reference_date)
+
+    # 7. Committee sector rotation
+    committee_rotations = _find_committee_rotation_signals(conn, reference_date)
+
+    # 8. Summary stats
     stats = _build_stats(conn)
 
     conn.close()
@@ -120,6 +129,9 @@ def build_daily_brief(
         "strong_congress_buys": [_signal_to_dict(s) for s in strong_congress],
         "cross_source_signals": [_cross_to_dict(c) for c in cross_source],
         "anomaly_alerts": [_anomaly_to_dict(a) for a in anomalies],
+        "participation_index": participation,
+        "earnings_proximity_alerts": earnings_alerts,
+        "committee_rotation_signals": committee_rotations,
         "stats": stats,
         "sector_summary": _build_sector_summary(
             db_path, strong_insider, strong_congress, cross_source, cluster_alerts
@@ -389,6 +401,232 @@ def _find_anomalous_activity(
     return alerts
 
 
+def _compute_participation_index(
+    conn: sqlite3.Connection,
+    reference_date: datetime,
+    window_days: int = 90,
+    universe_size: int = 504,
+) -> dict:
+    """Compute Insider Participation Index — % of S&P 500 with insider buying.
+
+    A market-level breadth indicator. High participation during price declines
+    = bullish divergence. Low participation during rallies = bearish warning.
+    """
+    from datetime import timedelta
+    cutoff = reference_date.strftime("%Y-%m-%d")
+    start = (reference_date - timedelta(days=window_days)).strftime("%Y-%m-%d")
+
+    # Current window
+    count = conn.execute(
+        """
+        SELECT COUNT(DISTINCT ticker) FROM normalized_transactions
+        WHERE source = 'insider' AND include_in_signal = 1 AND direction = 'BUY'
+          AND ticker IS NOT NULL AND execution_date >= ? AND execution_date <= ?
+        """,
+        (start, cutoff),
+    ).fetchone()[0]
+
+    rate = count / universe_size if universe_size > 0 else 0.0
+
+    # Historical average (all available data)
+    hist_row = conn.execute(
+        """
+        SELECT COUNT(DISTINCT ticker || ':' || SUBSTR(execution_date, 1, 7)) as ticker_months,
+               COUNT(DISTINCT SUBSTR(execution_date, 1, 7)) as months
+        FROM normalized_transactions
+        WHERE source = 'insider' AND include_in_signal = 1 AND direction = 'BUY'
+          AND ticker IS NOT NULL
+        """
+    ).fetchone()
+
+    ticker_months = hist_row[0] or 0
+    months = hist_row[1] or 1
+    historical_avg_monthly = ticker_months / months / universe_size if months > 0 else 0.0
+    # Scale to window
+    historical_avg = historical_avg_monthly * (window_days / 30)
+
+    return {
+        "rate": round(rate, 4),
+        "count": count,
+        "universe_size": universe_size,
+        "window_days": window_days,
+        "historical_avg": round(historical_avg, 4),
+        "above_average": rate > historical_avg,
+        "context": "bullish" if rate > historical_avg else "bearish",
+    }
+
+
+def _find_earnings_proximity_alerts(
+    conn: sqlite3.Connection,
+    reference_date: datetime,
+    proximity_days: int = 30,
+) -> list[dict]:
+    """Flag insider buys near known earnings dates as high-conviction."""
+    from datetime import timedelta
+
+    try:
+        import yfinance as yf
+    except ImportError:
+        return []
+
+    cutoff = reference_date.strftime("%Y-%m-%d")
+    start = (reference_date - timedelta(days=90)).strftime("%Y-%m-%d")
+
+    rows = conn.execute(
+        """
+        SELECT DISTINCT ticker, actor_name, execution_date
+        FROM normalized_transactions
+        WHERE source = 'insider' AND include_in_signal = 1 AND direction = 'BUY'
+          AND ticker IS NOT NULL AND execution_date >= ? AND execution_date <= ?
+        """,
+        (start, cutoff),
+    ).fetchall()
+
+    alerts = []
+    seen_tickers = set()
+    for row in rows:
+        ticker = row["ticker"]
+        if ticker in seen_tickers:
+            continue
+        seen_tickers.add(ticker)
+
+        try:
+            t = yf.Ticker(ticker)
+            cal = t.calendar
+            if cal is None or (hasattr(cal, 'empty') and cal.empty):
+                continue
+            # calendar may be a DataFrame or dict depending on yfinance version
+            if hasattr(cal, 'iloc'):
+                earnings_date = cal.iloc[0, 0] if cal.shape[1] > 0 else None
+            elif isinstance(cal, dict):
+                earnings_date = cal.get("Earnings Date", [None])[0] if "Earnings Date" in cal else None
+            else:
+                continue
+
+            if earnings_date is None:
+                continue
+
+            # Convert to date for comparison
+            if hasattr(earnings_date, 'date'):
+                earnings_dt = earnings_date
+            else:
+                earnings_dt = datetime.strptime(str(earnings_date)[:10], "%Y-%m-%d")
+
+            exec_dt = datetime.strptime(row["execution_date"], "%Y-%m-%d")
+            days_to_earnings = (earnings_dt - exec_dt).days
+
+            if 0 < days_to_earnings <= proximity_days:
+                alerts.append({
+                    "ticker": ticker.upper(),
+                    "actor_name": row["actor_name"],
+                    "execution_date": row["execution_date"],
+                    "earnings_date": str(earnings_date)[:10],
+                    "days_to_earnings": days_to_earnings,
+                })
+        except Exception:
+            continue
+
+    alerts.sort(key=lambda a: a["days_to_earnings"])
+    return alerts
+
+
+def _find_committee_rotation_signals(
+    conn: sqlite3.Connection,
+    reference_date: datetime,
+    lookback_days: int = 180,
+    recent_days: int = 30,
+) -> list[dict]:
+    """Detect when committee members collectively shift direction in their regulated sectors."""
+    from signals.congress.committees import COMMITTEE_SECTOR_MAP
+    from datetime import timedelta
+
+    cutoff = reference_date.strftime("%Y-%m-%d")
+    recent_start = (reference_date - timedelta(days=recent_days)).strftime("%Y-%m-%d")
+    prior_start = (reference_date - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
+
+    rows = conn.execute(
+        """
+        SELECT ticker, direction, execution_date, provenance_payload, actor_name
+        FROM normalized_transactions
+        WHERE source = 'congress' AND include_in_signal = 1
+          AND execution_date >= ? AND execution_date <= ?
+          AND provenance_payload LIKE '%committee%'
+        """,
+        (prior_start, cutoff),
+    ).fetchall()
+
+    if not rows:
+        return []
+
+    # Parse provenance and group by committee
+    committee_trades: dict[str, list[dict]] = defaultdict(list)
+    for row in rows:
+        try:
+            payload = json.loads(row["provenance_payload"]) if isinstance(row["provenance_payload"], str) else {}
+        except (json.JSONDecodeError, TypeError):
+            continue
+
+        committees = payload.get("committees", [])
+        committee_sectors = payload.get("committee_sectors", [])
+        if not committees or not committee_sectors:
+            continue
+
+        # Check if the traded stock's sector matches any committee sector
+        if not payload.get("committee_sector_match"):
+            continue
+
+        for code in committees:
+            committee_trades[code].append({
+                "ticker": row["ticker"],
+                "direction": row["direction"],
+                "execution_date": row["execution_date"],
+                "actor_name": row["actor_name"],
+            })
+
+    # Analyze rotation per committee
+    rotations = []
+    for code, trades in committee_trades.items():
+        if len(code) > 4:  # skip subcommittees
+            continue
+
+        recent = [t for t in trades if t["execution_date"] >= recent_start]
+        prior = [t for t in trades if t["execution_date"] < recent_start]
+
+        if not recent or not prior:
+            continue
+
+        recent_buys = sum(1 for t in recent if t["direction"] == "BUY")
+        recent_sells = sum(1 for t in recent if t["direction"] == "SELL")
+        prior_buys = sum(1 for t in prior if t["direction"] == "BUY")
+        prior_sells = sum(1 for t in prior if t["direction"] == "SELL")
+
+        recent_total = recent_buys + recent_sells
+        prior_total = prior_buys + prior_sells
+        if recent_total == 0 or prior_total == 0:
+            continue
+
+        recent_direction = "BUY" if recent_buys > recent_sells else "SELL" if recent_sells > recent_buys else "NEUTRAL"
+        prior_direction = "BUY" if prior_buys > prior_sells else "SELL" if prior_sells > prior_buys else "NEUTRAL"
+
+        # Only flag if direction actually flipped
+        if recent_direction != prior_direction and recent_direction != "NEUTRAL" and prior_direction != "NEUTRAL":
+            sectors = COMMITTEE_SECTOR_MAP.get(code, [])
+            members = sorted({t["actor_name"] for t in recent if t["actor_name"]})
+            rotations.append({
+                "committee_code": code.upper(),
+                "sectors": sectors,
+                "prior_direction": prior_direction,
+                "recent_direction": recent_direction,
+                "prior_buys": prior_buys,
+                "prior_sells": prior_sells,
+                "recent_buys": recent_buys,
+                "recent_sells": recent_sells,
+                "recent_members": members[:5],
+            })
+
+    return rotations
+
+
 def _anomaly_to_dict(a: AnomalyAlert) -> dict:
     from dataclasses import asdict
     return asdict(a)
@@ -540,6 +778,49 @@ def render_daily_brief_markdown(brief: dict) -> str:
         for ct in committee_trades[:10]:
             committees = ", ".join(ct.get("committees", [])[:3])
             lines.append(f"- **{ct['ticker']}** ({ct['direction']}) by {ct.get('actor_name', '?')} — committees: {committees}")
+        lines.append("")
+
+    # Insider Participation Index
+    participation = brief.get("participation_index")
+    if participation:
+        rate_pct = participation["rate"] * 100
+        avg_pct = participation["historical_avg"] * 100
+        context = participation["context"].upper()
+        lines.extend([
+            "## Insider Participation Index",
+            "",
+            f"{participation['count']} of {participation['universe_size']} S&P 500 companies "
+            f"({rate_pct:.1f}%) have insider buying in the last {participation['window_days']} days.",
+            f"Historical average: {avg_pct:.1f}%. Current: **{context}** context.",
+            "",
+        ])
+
+    # Pre-Earnings Insider Buys
+    earnings = brief.get("earnings_proximity_alerts", [])
+    if earnings:
+        lines.extend(["## Pre-Earnings Insider Buys", "", "Insider purchases within 30 days of known earnings dates.", ""])
+        for e in earnings:
+            lines.append(
+                f"- **{e['ticker']}**: {e['actor_name']} bought {e['days_to_earnings']}d before "
+                f"earnings ({e['earnings_date']}) — high conviction"
+            )
+        lines.append("")
+
+    # Committee Rotation Alerts
+    rotations = brief.get("committee_rotation_signals", [])
+    if rotations:
+        lines.extend(["## Committee Rotation Alerts", "", "Committees where members shifted direction in their regulated sectors.", ""])
+        for r in rotations:
+            sectors = ", ".join(r["sectors"][:2]) if r["sectors"] else "?"
+            members = ", ".join(r["recent_members"][:3])
+            lines.append(
+                f"- **{r['committee_code']}** ({sectors}): {r['prior_direction']} → {r['recent_direction']}"
+            )
+            lines.append(
+                f"  Prior: {r['prior_buys']} buys, {r['prior_sells']} sells. "
+                f"Recent: {r['recent_buys']} buys, {r['recent_sells']} sells. "
+                f"Members: {members}"
+            )
         lines.append("")
 
     if not alerts and not cross and not insider and not congress and not anomalies:

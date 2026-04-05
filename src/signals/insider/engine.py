@@ -41,6 +41,7 @@ SIZE_SIGNAL_BRACKETS = [(0.01, 0.5), (0.05, 0.8), (0.20, 1.0), (1.00, 1.2), (flo
 SIZE_SIGNAL_UNKNOWN = 0.6
 RECENCY_HALF_LIFE_DAYS = 45
 PER_INSIDER_SATURATION_CAP = 0.30
+CLUSTER_CONVICTION_BASE = 0.25
 BULLISH_THRESHOLD = 0.15
 BEARISH_THRESHOLD = -0.15
 CONFIDENCE_INSUFFICIENT = 0.25
@@ -141,6 +142,12 @@ def aggregate_company_signal(scored: list[dict], window_days: int) -> dict:
     buys = [s for s in scored if s["direction"] > 0]
     sells = [s for s in scored if s["direction"] < 0]
     unique_buyers = len({s["cik_owner"] for s in buys})
+
+    # Cluster conviction: amplify score when multiple unique insiders buy together
+    if unique_buyers >= 2 and score != 0.0:
+        conviction_multiplier = 1.0 + CLUSTER_CONVICTION_BASE * (unique_buyers - 1)
+        clamped = max(-0.999, min(0.999, score))
+        score = math.tanh(math.atanh(clamped) * conviction_multiplier)
     unique_sellers = len({s["cik_owner"] for s in sells})
     unique_insiders = len({s["cik_owner"] for s in scored})
     confidence = _compute_confidence(len(scored), unique_insiders, bool(buys), bool(sells))
