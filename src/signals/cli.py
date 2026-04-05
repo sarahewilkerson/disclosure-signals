@@ -911,6 +911,18 @@ def cmd_backtest(args):
             print(render_timeseries_markdown(stability, turnover))
 
 
+def cmd_serve(args):
+    import os
+    os.environ["SIGNALS_DB_PATH"] = args.db
+    try:
+        import uvicorn
+    except ImportError:
+        raise SystemExit("uvicorn not installed. Run: pip install uvicorn")
+    print(f"Starting dashboard at http://127.0.0.1:{args.port}")
+    print(f"DB: {args.db}")
+    uvicorn.run("signals.web.app:app", host="127.0.0.1", port=args.port, log_level="info")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="signals")
     parser.add_argument("--db", default=str(default_derived_db()))
@@ -1187,6 +1199,10 @@ def build_parser() -> argparse.ArgumentParser:
     backtest.add_argument("--senate-html-dir", required=True, help="Path to cached Senate HTML files")
     backtest.add_argument("--window", type=int, default=90, help="Lookback window in days")
     backtest.set_defaults(func=cmd_backtest)
+
+    serve = subparsers.add_parser("serve", help="Start web dashboard")
+    serve.add_argument("--port", type=int, default=8001, help="Port to listen on (default: 8001)")
+    serve.set_defaults(func=cmd_serve)
 
     return parser
 
