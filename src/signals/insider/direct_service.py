@@ -56,7 +56,7 @@ def _fingerprint(source_record_ids: list[str], method_version: str, as_of_date: 
     return hashlib.sha256(basis.encode("utf-8")).hexdigest()
 
 
-def run_direct_xml_into_derived(repo_root: Path, derived_db_path: str, xml_dir: str, reference_date: datetime) -> DirectInsiderRunResult:
+def run_direct_xml_into_derived(repo_root: Path, derived_db_path: str, xml_dir: str, reference_date: datetime, regime_weight: float = 1.0) -> DirectInsiderRunResult:
     init_db(derived_db_path)
     xml_root = Path(xml_dir)
     xml_files = sorted(xml_root.rglob("*.xml"))
@@ -176,7 +176,7 @@ def run_direct_xml_into_derived(repo_root: Path, derived_db_path: str, xml_dir: 
                         "total_value": txn.get("total_value"),
                         "accession_number": filing_id,
                     }
-                    scored_txn.update(score_transaction(scored_txn, reference_date))
+                    scored_txn.update(score_transaction(scored_txn, reference_date, regime_weight=regime_weight))
                     scored_transactions_by_entity[subject_key].append(scored_txn)
                     record_ids_by_entity[subject_key].append(source_record_id)
 

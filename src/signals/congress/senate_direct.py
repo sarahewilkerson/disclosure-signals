@@ -262,6 +262,7 @@ def run_direct_senate_html_into_derived(
     reference_date: datetime,
     window_days: int,
     max_files: int | None = None,
+    regime_weight: float = 1.0,
 ) -> DirectSenateRunResult:
     init_db(derived_db_path)
     html_root = Path(html_dir)
@@ -419,6 +420,7 @@ def run_direct_senate_html_into_derived(
                     signal_weight=1.0,
                     reference_date=reference_date,
                     disclosure_date=filing_date or reference_date,
+                    regime_weight=regime_weight,
                 )
                 subject_key = f"entity:{normalized.ticker.lower()}"
                 scored_by_subject[subject_key].append(scored)

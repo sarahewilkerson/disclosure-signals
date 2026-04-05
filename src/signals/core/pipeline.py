@@ -270,6 +270,10 @@ def run_direct_pipeline(
         if progress_callback is not None:
             progress_callback(stage, payload)
 
+    from signals.core.regime import compute_regime
+    regime = compute_regime(reference_date)
+    _emit("regime_computed", regime.to_dict())
+
     def _run_insider_branch():
         _emit("insider_ingest_start", {"csv_path": insider_csv_path, "cache_dir": insider_cache_dir})
         insider_ingest = ingest_universe_direct(
@@ -287,6 +291,7 @@ def run_direct_pipeline(
             derived_db_path=derived_db_path,
             xml_dir=insider_ingest["filings_dir"],
             reference_date=reference_date,
+            regime_weight=regime.regime_weight_buy,
         )
         _emit("insider_score_done", insider.to_dict())
         return insider_ingest, insider
@@ -309,6 +314,7 @@ def run_direct_pipeline(
             reference_date=reference_date,
             window_days=lookback_window,
             max_files=house_max_filings,
+            regime_weight=regime.regime_weight_buy,
         )
         _emit("house_score_done", house.to_dict())
         return house_ingest, house
@@ -331,6 +337,7 @@ def run_direct_pipeline(
             reference_date=reference_date,
             window_days=lookback_window,
             max_files=senate_max_filings,
+            regime_weight=regime.regime_weight_buy,
         )
         _emit("senate_score_done", senate.to_dict())
         return senate_ingest, senate

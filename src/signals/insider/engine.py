@@ -94,7 +94,7 @@ def compute_pct_holdings_changed(shares: float | None, shares_after: float | Non
     return shares / total
 
 
-def score_transaction(txn: dict, reference_date: datetime) -> dict:
+def score_transaction(txn: dict, reference_date: datetime, regime_weight: float = 1.0) -> dict:
     txn_code = txn.get("transaction_code", "")
     role = txn.get("role_class", "")
     is_planned = bool(txn.get("is_likely_planned", 0))
@@ -108,7 +108,7 @@ def score_transaction(txn: dict, reference_date: datetime) -> dict:
     size_signal = _compute_size_signal(pct_changed)
     ownership_weight = DIRECT_OWNERSHIP_WEIGHT if ownership == "D" else INDIRECT_OWNERSHIP_WEIGHT
     recency_weight = _compute_recency_weight(txn_date_str, reference_date)
-    transaction_signal = direction * role_weight * discretionary_weight * size_signal * ownership_weight * recency_weight
+    transaction_signal = direction * role_weight * discretionary_weight * size_signal * ownership_weight * recency_weight * regime_weight
     return {
         "direction": direction,
         "role_weight": role_weight,

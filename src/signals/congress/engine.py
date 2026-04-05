@@ -109,6 +109,7 @@ def score_transaction(
     signal_weight: float,
     reference_date: datetime,
     disclosure_date: datetime | None = None,
+    regime_weight: float = 1.0,
     amount_method: str = "geometric_mean",
     use_log_scaling: bool = False,
 ) -> ScoredTransaction:
@@ -125,7 +126,7 @@ def score_transaction(
     owner_weight = get_owner_weight(owner_type)
     lag_penalty = disclosure_lag_penalty(execution_date, disclosure_date)
     raw_score = base_value * direction * stale * owner_weight
-    final_score = raw_score * resolution_confidence * signal_weight * lag_penalty
+    final_score = raw_score * resolution_confidence * signal_weight * lag_penalty * regime_weight
     return ScoredTransaction(
         member_id=member_id,
         ticker=ticker,

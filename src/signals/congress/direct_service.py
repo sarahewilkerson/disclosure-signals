@@ -78,6 +78,7 @@ def run_direct_house_pdfs_into_derived(
     reference_date: datetime,
     window_days: int,
     max_files: int | None = None,
+    regime_weight: float = 1.0,
 ) -> DirectCongressRunResult:
     init_db(derived_db_path)
     pdf_root = Path(pdf_dir)
@@ -240,6 +241,7 @@ def run_direct_house_pdfs_into_derived(
                     signal_weight=1.0,
                     reference_date=reference_date,
                     disclosure_date=txn.notification_date,
+                    regime_weight=regime_weight,
                 )
                 subject_key = f"entity:{normalized.ticker.lower()}"
                 scored_by_subject[subject_key].append(scored)

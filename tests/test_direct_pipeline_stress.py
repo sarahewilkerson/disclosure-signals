@@ -90,7 +90,7 @@ def test_parallel_direct_pipeline_repeated_runs_same_db(tmp_path, monkeypatch):
     monkeypatch.setattr("signals.core.pipeline.ingest_senate_ptrs_direct", lambda **kwargs: _IngestObj())
     monkeypatch.setattr(
         "signals.core.pipeline.run_direct_xml_into_derived",
-        lambda repo_root, derived_db_path, xml_dir, reference_date: _Obj(
+        lambda repo_root, derived_db_path, xml_dir, reference_date, **kwargs: _Obj(
             run_id=_write_source_result(derived_db_path, "insider", "entity:aapl", 0.4, "stress_insider"),
             imported_result_count=1,
             imported_normalized_count=0,
@@ -98,7 +98,7 @@ def test_parallel_direct_pipeline_repeated_runs_same_db(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         "signals.core.pipeline.run_direct_house_pdfs_into_derived",
-        lambda repo_root, derived_db_path, pdf_dir, reference_date, window_days, max_files=None: _Obj(
+        lambda repo_root, derived_db_path, pdf_dir, reference_date, window_days, max_files=None, **kwargs: _Obj(
             run_id=_write_source_result(derived_db_path, "congress", "entity:aapl", 0.2, "stress_house"),
             imported_result_count=1,
             imported_normalized_count=0,
@@ -106,7 +106,7 @@ def test_parallel_direct_pipeline_repeated_runs_same_db(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         "signals.core.pipeline.run_direct_senate_html_into_derived",
-        lambda repo_root, derived_db_path, html_dir, reference_date, window_days, max_files=None: _Obj(
+        lambda repo_root, derived_db_path, html_dir, reference_date, window_days, max_files=None, **kwargs: _Obj(
             run_id=_write_source_result(derived_db_path, "congress", "entity:msft", -0.3, "stress_senate"),
             imported_result_count=1,
             imported_normalized_count=0,
