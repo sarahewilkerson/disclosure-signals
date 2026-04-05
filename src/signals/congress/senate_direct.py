@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from collections import defaultdict
 from dataclasses import asdict, dataclass
@@ -105,6 +106,28 @@ def _normalize_txn_type(raw: str | None) -> str:
     return "unknown"
 
 
+def _write_filing_metadata(html_path: Path, filing) -> None:
+    meta_path = html_path.with_name(html_path.stem + "_meta.json")
+    filing_date = getattr(filing, "filing_date", None)
+    meta = {
+        "filing_id": getattr(filing, "filing_id", None),
+        "filer_name": getattr(filing, "filer_name", None),
+        "filing_date": filing_date.strftime("%Y-%m-%d") if filing_date else None,
+        "is_paper": getattr(filing, "is_paper", None),
+    }
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+
+
+def _read_filing_metadata(html_path: Path) -> dict | None:
+    meta_path = html_path.with_name(html_path.stem + "_meta.json")
+    if not meta_path.exists():
+        return None
+    try:
+        return json.loads(meta_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
 def _parse_amount_range(repo_root: Path, amount_range: str | None) -> tuple[int | None, int | None]:
     if not amount_range:
         return None, None
@@ -141,6 +164,7 @@ def ingest_senate_ptrs_direct(
             failed += 1
         else:
             downloaded_ptr += 1
+            _write_filing_metadata(result, filing)
 
     return DirectSenateIngestResult(
         searched_count=len(filings),
@@ -282,6 +306,13 @@ def run_direct_senate_html_into_derived(
                 skipped_count += 1
                 continue
             filing_id = f"senate:{ptr_id}"
+            meta = _read_filing_metadata(html_path)
+            filing_date = None
+            if meta and meta.get("filing_date"):
+                try:
+                    filing_date = datetime.strptime(meta["filing_date"], "%Y-%m-%d")
+                except (ValueError, TypeError):
+                    pass
             for idx, txn in enumerate(transactions, start=1):
                 source_record_id = f"{filing_id}:{idx}"
                 native_res = resolve_transaction(
@@ -330,7 +361,7 @@ def run_direct_senate_html_into_derived(
                     transaction_type=txn_type,
                     direction=_direction(txn_type),
                     execution_date=txn.transaction_date.strftime("%Y-%m-%d") if txn.transaction_date else None,
-                    disclosure_date=reference_date.strftime("%Y-%m-%d"),
+                    disclosure_date=filing_date.strftime("%Y-%m-%d") if filing_date else reference_date.strftime("%Y-%m-%d"),
                     amount_low=float(amount_min) if amount_min is not None else None,
                     amount_high=float(amount_max) if amount_max is not None else None,
                     amount_estimate=((float(amount_min) + float(amount_max)) / 2.0) if amount_min is not None and amount_max is not None else None,
@@ -387,7 +418,7 @@ def run_direct_senate_html_into_derived(
                     resolution_confidence=resolution_event.resolution_confidence,
                     signal_weight=1.0,
                     reference_date=reference_date,
-                    disclosure_date=reference_date,
+                    disclosure_date=filing_date or reference_date,
                 )
                 subject_key = f"entity:{normalized.ticker.lower()}"
                 scored_by_subject[subject_key].append(scored)

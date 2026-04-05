@@ -399,3 +399,33 @@ def test_regime_analysis_no_yfinance(monkeypatch):
     monkeypatch.setattr(val_mod, "HAS_YFINANCE", False)
     result = val_mod.run_regime_analysis("/nonexistent.db")
     assert "error" in result
+
+
+def test_senate_filing_metadata_sidecar(tmp_path):
+    """Sidecar JSON should round-trip filing metadata."""
+    from signals.congress.senate_direct import _write_filing_metadata, _read_filing_metadata
+    from signals.congress.senate_connector import SenateFiling
+
+    html_path = tmp_path / "ptr_abcdef12.html"
+    html_path.write_text("<html></html>")
+
+    filing = SenateFiling(
+        filing_id="abcdef12-abcd-1234-abcd-abcdef123456",
+        filer_name="Senator Test",
+        state=None,
+        filing_date=datetime(2026, 3, 15),
+        report_url="https://example.com",
+        is_paper=False,
+    )
+    _write_filing_metadata(html_path, filing)
+
+    meta = _read_filing_metadata(html_path)
+    assert meta is not None
+    assert meta["filing_date"] == "2026-03-15"
+    assert meta["filer_name"] == "Senator Test"
+    assert meta["is_paper"] is False
+
+    # Missing sidecar returns None
+    other_path = tmp_path / "ptr_noexist.html"
+    other_path.write_text("<html></html>")
+    assert _read_filing_metadata(other_path) is None
