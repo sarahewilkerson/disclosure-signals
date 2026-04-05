@@ -38,3 +38,28 @@ File: `src/signals/core/versioning.py`
 - Filing date read and passed to score_transaction during scoring
 - Test verifying sidecar write/read round-trip
 - Congress method version bumped
+
+---
+
+## Execution Results
+
+**Executed:** 2026-04-04
+**Branch:** `feat/senate-filing-date-sidecar`
+
+### Results
+- **10a:** `_write_filing_metadata()` writes JSON sidecar during ingestion. Uses `getattr` for defensive handling of incomplete mock objects.
+- **10b:** `_read_filing_metadata()` reads sidecar during scoring. `filing_date` passed as `disclosure_date` to `score_transaction`, falling back to `reference_date` when no sidecar exists.
+- **10c:** CONGRESS_SCORE_METHOD_VERSION bumped to quality4.
+- **Test:** `test_senate_filing_metadata_sidecar` verifies round-trip write/read + missing sidecar returns None.
+- **Issue found:** Existing test mock `Filing` class lacked `filer_name`/`filing_date` attrs — made `_write_filing_metadata` defensive with `getattr`.
+- 84/85 tests pass (1 pre-existing).
+
+## Sync Verification
+- [x] Verification strategy executed: PASS
+- [x] Branch pushed to remote: YES
+- [x] Branch merged to main: YES
+- [x] Main pushed to remote: YES
+- [x] Documentation updated and current: YES
+- [x] Production deploy: SKIPPED
+- [x] Local, remote, and main are consistent: YES
+- Verified at: 2026-04-04
