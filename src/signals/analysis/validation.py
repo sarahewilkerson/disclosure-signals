@@ -684,3 +684,149 @@ def render_regime_analysis_markdown(report: dict) -> str:
         lines.append(f"| {key} | {b_acc} | {b['count']} | {r_acc} | {r['count']} | {b_ret} | {r_ret} |")
 
     return "\n".join(lines) + "\n"
+
+
+# Sector ETF mapping for sector-relative validation
+SECTOR_ETF_MAP = {
+    "Technology": "XLK",
+    "Health Care": "XLV",
+    "Financials": "XLF",
+    "Consumer Discretionary": "XLY",
+    "Consumer Staples": "XLP",
+    "Energy": "XLE",
+    "Industrials": "XLI",
+    "Materials": "XLB",
+    "Utilities": "XLU",
+    "Real Estate": "XLRE",
+    "Communication Services": "XLC",
+}
+
+
+def run_sector_relative_validation(
+    db_path: str,
+    forward_days: list[int] | None = None,
+    min_date: str | None = None,
+    max_date: str | None = None,
+) -> dict:
+    """Validate insider buy signals using sector-relative returns.
+
+    For each insider buy, computes stock_return - sector_ETF_return.
+    If sector-adjusted accuracy < 55%, signals are mostly beta, not alpha.
+    """
+    if not HAS_YFINANCE:
+        return {"error": "yfinance not installed"}
+
+    if forward_days is None:
+        forward_days = [5, 20, 60]
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+
+    query = """
+        SELECT ticker, execution_date
+        FROM normalized_transactions
+        WHERE source = 'insider' AND include_in_signal = 1
+          AND direction = 'BUY' AND ticker IS NOT NULL AND execution_date IS NOT NULL
+    """
+    params: list = []
+    if min_date:
+        query += " AND execution_date >= ?"
+        params.append(min_date)
+    if max_date:
+        query += " AND execution_date <= ?"
+        params.append(max_date)
+
+    rows = [dict(r) for r in conn.execute(query, params).fetchall()]
+    conn.close()
+
+    if not rows:
+        return {"error": "No insider buys found"}
+
+    try:
+        from signals.analysis.sectors import get_sector_map
+        tickers = list({r["ticker"].upper() for r in rows})
+        sector_map = get_sector_map(tickers)
+    except Exception:
+        return {"error": "Could not fetch sector data"}
+
+    etf_tickers = set()
+    ticker_to_etf = {}
+    skipped = 0
+    for r in rows:
+        ticker = r["ticker"].upper()
+        sector = sector_map.get(ticker, {}).get("sector")
+        etf = SECTOR_ETF_MAP.get(sector) if sector else None
+        if etf:
+            etf_tickers.add(etf)
+            ticker_to_etf[ticker] = etf
+        else:
+            skipped += 1
+
+    all_tickers = [r["ticker"].upper() for r in rows if r["ticker"].upper() in ticker_to_etf]
+    all_dates = [r["execution_date"] for r in rows if r["ticker"].upper() in ticker_to_etf]
+
+    stock_returns = _fetch_forward_returns(all_tickers, all_dates, forward_days)
+    etf_returns = _fetch_forward_returns(list(etf_tickers), list(set(all_dates)), forward_days)
+
+    summary: dict = {}
+    for fwd in forward_days:
+        outperform = 0
+        underperform = 0
+        excess_returns: list[float] = []
+
+        for r in rows:
+            ticker = r["ticker"].upper()
+            etf = ticker_to_etf.get(ticker)
+            if not etf:
+                continue
+            stock_ret = stock_returns.get((ticker, r["execution_date"], fwd))
+            sector_ret = etf_returns.get((etf, r["execution_date"], fwd))
+            if stock_ret is None or sector_ret is None:
+                continue
+            excess = stock_ret - sector_ret
+            excess_returns.append(excess)
+            if excess > 0:
+                outperform += 1
+            else:
+                underperform += 1
+
+        total = outperform + underperform
+        summary[f"{fwd}d"] = {
+            "total": total,
+            "outperform": outperform,
+            "underperform": underperform,
+            "sector_adjusted_accuracy": round(outperform / total, 4) if total else None,
+            "mean_excess_return": round(statistics.mean(excess_returns), 6) if excess_returns else None,
+            "is_alpha": (outperform / total > 0.55) if total else None,
+        }
+
+    return {
+        "transaction_count": len(rows),
+        "with_sector": len(rows) - skipped,
+        "skipped_no_sector": skipped,
+        "forward_windows": forward_days,
+        "summary": summary,
+    }
+
+
+def render_sector_relative_markdown(report: dict) -> str:
+    if "error" in report:
+        return f"# Sector-Relative Validation\n\n**Error:** {report['error']}\n"
+
+    lines = [
+        "# Sector-Relative Validation",
+        "",
+        f"**Transactions:** {report['transaction_count']} ({report['with_sector']} with sector data, {report['skipped_no_sector']} skipped)",
+        "",
+        "Does the stock outperform its sector? If accuracy < 55%, signals are beta, not alpha.",
+        "",
+        "| Window | Outperform | Underperform | Sector-Adj Accuracy | Mean Excess Return | Alpha? |",
+        "|--------|-----------|-------------|--------------------|--------------------|--------|",
+    ]
+    for key, stats in report["summary"].items():
+        acc = f"{stats['sector_adjusted_accuracy']:.1%}" if stats["sector_adjusted_accuracy"] is not None else "N/A"
+        ret = f"{stats['mean_excess_return']:.4%}" if stats["mean_excess_return"] is not None else "N/A"
+        alpha = "YES" if stats.get("is_alpha") else "NO" if stats.get("is_alpha") is False else "N/A"
+        lines.append(f"| {key} | {stats['outperform']} | {stats['underperform']} | {acc} | {ret} | {alpha} |")
+
+    return "\n".join(lines) + "\n"

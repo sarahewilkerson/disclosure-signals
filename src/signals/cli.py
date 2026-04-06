@@ -843,6 +843,7 @@ def cmd_validate(args):
         run_transaction_validation, render_transaction_validation_markdown,
         run_baseline_comparison, render_baseline_comparison_markdown,
         run_regime_analysis, render_regime_analysis_markdown,
+        run_sector_relative_validation, render_sector_relative_markdown,
     )
     forward_days = [int(d) for d in args.forward_days.split(",")] if args.forward_days else [5, 10, 20, 60]
     report = run_transaction_validation(
@@ -867,6 +868,9 @@ def cmd_validate(args):
         if args.regime:
             print()
             print(render_regime_analysis_markdown(run_regime_analysis(args.db, forward_days, args.min_date, args.max_date)))
+        if getattr(args, 'sector_relative', False):
+            print()
+            print(render_sector_relative_markdown(run_sector_relative_validation(args.db, forward_days, args.min_date, args.max_date)))
 
 
 def cmd_brief(args):
@@ -1182,6 +1186,7 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--forward-days", default=None, help="Comma-separated forward windows (default: 5,10,20,60)")
     validate.add_argument("--baseline", action="store_true", help="Include trivial baseline comparison")
     validate.add_argument("--regime", action="store_true", help="Include market regime analysis")
+    validate.add_argument("--sector-relative", action="store_true", help="Include sector-relative validation (alpha vs beta)")
     validate.set_defaults(func=cmd_validate)
 
     brief = subparsers.add_parser("brief", help="Generate high-signal daily brief")
