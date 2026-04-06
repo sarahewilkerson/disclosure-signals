@@ -733,3 +733,40 @@ def test_committee_rotation_detection():
         assert ssba is not None
         assert ssba["prior_direction"] == "BUY"
         assert ssba["recent_direction"] == "SELL"
+
+
+def test_rank_transaction_ceo_direct_buy():
+    """CEO direct discretionary buy should rank 7/9."""
+    from signals.insider.engine import rank_transaction
+
+    txn = {
+        "role_class": "ceo",
+        "is_likely_planned": 0,
+        "ownership_nature": "D",
+        "pct_holdings_changed": 0.02,  # below 5% threshold
+        "transaction_date": "2026-04-01",
+    }
+    result = rank_transaction(txn, datetime(2026, 4, 5))
+
+    assert result["rank"] == 8  # CEO(3) + discretionary(2) + direct(2) + recent 4d(1)
+    assert result["max_rank"] == 9
+    assert len(result["factors"]) == 4  # CEO + discretionary + direct + recent
+    assert len(result["factors_missing"]) == 1  # size only
+
+
+def test_rank_transaction_planned_indirect():
+    """10b5-1 indirect officer should rank low."""
+    from signals.insider.engine import rank_transaction
+
+    txn = {
+        "role_class": "officer_other",
+        "is_likely_planned": 1,
+        "ownership_nature": "I",
+        "pct_holdings_changed": 0.01,
+        "transaction_date": "2026-03-01",
+    }
+    result = rank_transaction(txn, datetime(2026, 4, 5))
+
+    assert result["rank"] == 1  # officer(1) only — planned(0) + indirect(0)
+    assert result["max_rank"] == 9
+    assert "10b5-1" in result["factors_missing"][0]

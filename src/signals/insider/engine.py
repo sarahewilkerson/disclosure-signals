@@ -95,6 +95,71 @@ def compute_pct_holdings_changed(shares: float | None, shares_after: float | Non
     return shares / total
 
 
+def rank_transaction(txn: dict, reference_date: datetime) -> dict:
+    """Rank an insider transaction on a transparent 0-9 additive scale.
+
+    Each point is explainable. Designed to replace multiplicative scoring
+    complexity with honest, auditable ranking. Factors:
+      - C-suite role: +3 (CEO/CFO) or +2 (Chair/President/COO) or +1 (other)
+      - Discretionary (not 10b5-1): +2
+      - Direct ownership: +2
+      - Material size (>5% of holdings): +1
+      - Very recent (<14 days): +1
+    """
+    rank = 0
+    factors = []
+    factors_missing = []
+
+    role = txn.get("role_class", "")
+    if role in ("ceo", "cfo"):
+        rank += 3
+        factors.append(f"C-suite ({role.upper()}) purchase (+3)")
+    elif role in ("chair", "president", "coo"):
+        rank += 2
+        factors.append(f"{role.title()} purchase (+2)")
+    else:
+        rank += 1
+        factors.append(f"Officer purchase (+1)")
+
+    is_planned = bool(txn.get("is_likely_planned", 0))
+    if not is_planned:
+        rank += 2
+        factors.append("Discretionary, not 10b5-1 (+2)")
+    else:
+        factors_missing.append("10b5-1 planned trade (0)")
+
+    ownership = txn.get("ownership_nature", "D")
+    if ownership == "D":
+        rank += 2
+        factors.append("Direct ownership (+2)")
+    else:
+        factors_missing.append("Indirect ownership (0)")
+
+    pct = txn.get("pct_holdings_changed")
+    if pct is not None and pct > 0.05:
+        rank += 1
+        factors.append(f"Material size: {pct:.1%} of holdings (+1)")
+    else:
+        factors_missing.append(f"Size: {pct:.1%} of holdings" if pct else "Size unknown")
+
+    txn_date_str = txn.get("transaction_date")
+    if txn_date_str:
+        try:
+            txn_date = datetime.strptime(txn_date_str[:10], "%Y-%m-%d")
+            days_ago = max(0, (reference_date - txn_date).days)
+            if days_ago < 14:
+                rank += 1
+                factors.append(f"Very recent: {days_ago}d ago (+1)")
+            else:
+                factors_missing.append(f"{days_ago}d ago (not within 14d)")
+        except (ValueError, TypeError):
+            factors_missing.append("Date unknown")
+    else:
+        factors_missing.append("Date unknown")
+
+    return {"rank": rank, "max_rank": 9, "factors": factors, "factors_missing": factors_missing}
+
+
 def score_transaction(txn: dict, reference_date: datetime, regime_weight: float = 1.0) -> dict:
     txn_code = txn.get("transaction_code", "")
     role = txn.get("role_class", "")

@@ -53,6 +53,7 @@ class StrongSignal:
     confidence: float
     included_count: int
     lookback_window: int
+    rank_info: dict | None = None
 
 
 @dataclass
@@ -100,6 +101,7 @@ def build_daily_brief(
 
     # 2. Strong buy signals (bullish with decent confidence)
     strong_insider = _find_strong_signals(conn, "insider", min_confidence)
+    _enrich_with_rank(conn, strong_insider, reference_date)
     strong_congress = _find_strong_signals(conn, "congress", min_confidence)
 
     # 3. Cross-source signals from combined results
@@ -285,6 +287,43 @@ def _find_strong_signals(
         )
         for row in best_by_ticker.values()
     ]
+
+
+def _enrich_with_rank(conn: sqlite3.Connection, signals: list[StrongSignal], reference_date: datetime) -> None:
+    """Add rank_info to each insider signal from underlying transaction data."""
+    from signals.insider.engine import rank_transaction
+
+    for signal in signals:
+        ticker = signal.ticker
+        rows = conn.execute(
+            """
+            SELECT actor_type, owner_type, execution_date, provenance_payload
+            FROM normalized_transactions
+            WHERE source = 'insider' AND include_in_signal = 1 AND direction = 'BUY'
+              AND ticker = ? ORDER BY execution_date DESC LIMIT 1
+            """,
+            (ticker,),
+        ).fetchall()
+
+        if not rows:
+            continue
+
+        row = rows[0]
+        # Build a txn dict compatible with rank_transaction
+        try:
+            payload = json.loads(row["provenance_payload"]) if isinstance(row["provenance_payload"], str) else {}
+        except (json.JSONDecodeError, TypeError):
+            payload = {}
+
+        txn = {
+            "role_class": row["actor_type"],
+            "is_likely_planned": 0,  # if it passed filtering, it's not a 10b5-1
+            "ownership_nature": "D" if row["owner_type"] == "direct" else "I",
+            "pct_holdings_changed": None,  # not easily available from normalized_transactions
+            "transaction_date": row["execution_date"],
+        }
+        rank_info = rank_transaction(txn, reference_date)
+        signal.rank_info = rank_info
 
 
 def _find_cross_source(conn: sqlite3.Connection) -> list[CrossSourceSignal]:
@@ -722,13 +761,22 @@ def render_daily_brief_markdown(brief: dict) -> str:
     # Strong insider buys
     insider = brief["strong_insider_buys"]
     if insider:
-        lines.extend(["## Strong Insider Buys", "", ""])
+        lines.extend(["## Strong Insider Buys", ""])
         for s in insider:
-            lines.append(
-                f"- **{s['ticker']}**: score={s['score']:.3f}, "
-                f"confidence={s['confidence']:.2f}, "
-                f"{s['included_count']} transactions ({s['lookback_window']}d window)"
-            )
+            rank_info = s.get("rank_info")
+            if rank_info:
+                lines.append(f"**{s['ticker']}** — Rank: {rank_info['rank']}/{rank_info['max_rank']}")
+                for f in rank_info.get("factors", []):
+                    lines.append(f"  ✓ {f}")
+                for f in rank_info.get("factors_missing", []):
+                    lines.append(f"  ○ {f}")
+                lines.append("")
+            else:
+                lines.append(
+                    f"- **{s['ticker']}**: score={s['score']:.3f}, "
+                    f"confidence={s['confidence']:.2f}, "
+                    f"{s['included_count']} transactions ({s['lookback_window']}d window)"
+                )
         lines.append("")
 
     # Strong congress buys
