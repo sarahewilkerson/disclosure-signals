@@ -97,9 +97,45 @@ Senate PTRs ─┘             │  (per-source)│
 
 ## Scoring Model Details
 
-### Insider Scoring
+### Additive Ranking (Primary)
 
-Each insider transaction is scored as:
+Each insider transaction is ranked on a transparent 0-9 additive scale. This replaced multiplicative scoring as the primary brief output after an external critique identified that the scoring complexity created false precision from thin data.
+
+| Factor | Points | Criteria |
+|--------|--------|----------|
+| C-suite role | +3 | CEO or CFO |
+| Senior role | +2 | Chair, President, or COO |
+| Officer role | +1 | Other officer |
+| Discretionary | +2 | Not a 10b5-1 planned trade |
+| Direct ownership | +2 | Direct, not indirect/trust |
+| Material size | +1 | >5% of holdings changed |
+| Very recent | +1 | Within 14 days |
+
+The daily brief shows the rank breakdown for each signal:
+```
+**CSGP** — Rank: 6/9
+  ✓ President purchase (+2)
+  ✓ Discretionary, not 10b5-1 (+2)
+  ✓ Direct ownership (+2)
+  ○ Size unknown
+  ○ 35d ago (not within 14d)
+```
+
+### Sector-Relative Validation Finding
+
+Sector-adjusted analysis revealed that insider buying is a **short-term signal** (~5 days of alpha), not a long-term signal:
+
+| Window | Raw Accuracy | Sector-Adjusted | Verdict |
+|--------|-------------|-----------------|---------|
+| 5d | 79% | **63.6%** | Alpha (stocks outperform sector) |
+| 20d | 68% | **45.5%** | Beta (stocks track sector) |
+| 60d | 68% | **9.1%** | Heavily beta (stocks underperform sector) |
+
+This means the 90-day and 180-day lookback windows may over-weight stale information. The system's value concentrates in the first week after an insider buy.
+
+### Multiplicative Scoring (Retained for Comparison)
+
+The original multiplicative scorer is retained alongside the ranker for backward compatibility and A/B comparison. Each insider transaction is scored as:
 
 ```
 transaction_signal = direction × role_weight × discretionary_weight 
