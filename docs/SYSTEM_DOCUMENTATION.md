@@ -271,7 +271,7 @@ Trades where the member's committee jurisdiction matches the stock's GICS sector
 
 7. **No earnings surprise correlation.** The earnings proximity signal flags pre-earnings buys but doesn't track whether those earnings were actually positive surprises.
 
-8. **No sector-relative analysis.** A defense stock rising 5% when the defense sector is up 8% is underperformance, not a successful prediction. Sector-adjusted returns would be more accurate than raw returns.
+8. ~~No sector-relative analysis.~~ **RESOLVED.** `run_sector_relative_validation()` now computes stock return minus sector ETF return. Finding: 63.6% sector-adjusted accuracy at 5d (alpha), 9.1% at 60d (beta). Insider buying is a short-term signal.
 
 ---
 
@@ -381,33 +381,67 @@ CONGRESS_API_KEY=<congress.gov-api-key>
 
 ---
 
-## Future Development
+## Honest Assessment
 
-### High Priority
+After two rounds of external critique, the system's identity is clear:
 
-1. **Russell 2000 expansion.** The DB schema is generic — only a new universe CSV is needed. Initial ingest: ~5.5 hours. Would dramatically increase the insider buy sample from 34 tickers to potentially 200+.
+**What it is:**
+- An effective filtered research monitor and watchlist generator
+- A short-horizon trading-intelligence system (cautiously)
+- A good product foundation with clean architecture and honest self-awareness
 
-2. **Ingest/scoring separation.** The daily job should always score cached files (fast, reliable). A separate weekly job should run the full SEC ingest (slow, rate-limited). Currently the daily job runs scoring-only; ingest is manual.
+**What it is not (yet):**
+- A durable multi-horizon alpha system
+- A production trading signal engine that deserves capital by itself
+- A statistically validated scoring model
 
-3. **Options flow integration.** Cross-reference insider stock purchases with unusual options activity (call volume spikes, put-call ratio shifts). Academic evidence shows options markets price insider information before stock markets.
+**Why not:**
+- Insider buy sample is too small (34 qualifying tickers, N=19-36 for validation)
+- The additive rank weights (CEO +3, direct +2, etc.) are plausible but not empirically proven
+- Sector-adjusted analysis shows alpha at 5 days but beta at 20+ days
+- Amendment supersession is incomplete — filing corrections may contaminate rankings
+- Congress data is structurally stale (45+ day disclosure lag)
+- Walk-forward and out-of-sample validation have not been performed
 
-### Medium Priority
+**The right framing:** This is a high-signal monitor with honest noise suppression. Use it to generate watchlists and short-horizon alerts, not as a standalone trading oracle. Every signal should be treated as a research lead, not a trade instruction.
 
-4. **Sector-adjusted returns.** Validate signal accuracy using sector-relative returns rather than absolute returns. A tech stock up 5% when XLK is up 8% is a miss, not a hit.
+---
 
-5. **Earnings surprise tracking.** The earnings proximity signal flags pre-earnings buys but doesn't close the loop — did the earnings actually beat? Cross-reference with actual EPS surprises.
+## Future Development (Priority-Ordered)
 
-6. **Short interest cross-reference.** When insiders buy while short interest is elevated, the conviction signal is amplified. Short interest data is available from FINRA with a 2-week delay.
+### Tier 1: Evidence & Hygiene (do before adding features)
 
-7. **Vesting schedule arbitrage.** Distinguish between forced RSU vesting sales (noise) and discretionary purchases made despite upcoming vesting events (high conviction).
+1. **Amendment supersession.** When a Form 4 amendment is parsed, flag the original as superseded. Only score the latest version. This is not glamorous but is more important than new signal types — contaminated data undermines everything.
 
-### Experimental
+2. **Ranker evaluation.** Test whether higher ranks actually correspond to better forward returns. Top-rank vs low-rank spread, bucketed by 5d/20d. If rank 8-9 doesn't outperform rank 3-4, the point system is decoration.
 
-8. **Insider Participation Index as a macro indicator.** Currently shows 1.4% of S&P 500 with insider buying. Track this over time to detect market-level regime changes. Divergences between insider breadth and price breadth may predict reversals.
+3. **Walk-forward validation.** Train on 2022-2023, test on 2024-2025. Does what looked good in one period stay good in the next? This is the minimum bar for any system that claims predictive power.
 
-9. **Committee sector rotation as a policy signal.** When Banking Committee members collectively shift from buying to selling financials, this may indicate upcoming regulatory tightening. This is the system's most unconventional signal.
+4. **Russell 2000 expansion.** Increase the insider-buy sample from 34 tickers to 200+. The DB schema is generic. This is the single best way to improve statistical power.
 
-10. **Machine learning for insider intent.** Train separate models per sector to distinguish informational buys from routine buys. Input features: role, trade size, historical trading pattern, time since last buy, sector momentum, options flow.
+### Tier 2: Signal Confirmation
+
+5. **Short-interest overlay.** When insiders buy while short interest is elevated, conviction is amplified. Available from FINRA with 2-week delay.
+
+6. **Options-flow confirmation.** Cross-reference insider purchases with unusual call volume. Academic evidence: options markets price insider information before stock markets.
+
+7. **Earnings surprise closure.** The earnings proximity signal flags pre-earnings buys but doesn't track whether earnings actually beat. Close the loop.
+
+8. **Negative-evidence panel.** For every surfaced signal, show what's weak: amendment unresolved? Only one buyer? Low resolution confidence? Stale execution? Congress lag? This makes the brief more honest.
+
+### Tier 3: Deeper Analysis
+
+9. ~~Sector-adjusted returns.~~ **IMPLEMENTED.** `signals validate --sector-relative`.
+
+10. **Factor-adjusted returns.** Market + size + value adjustment (Fama-French 3-factor). Goes beyond sector-relative to control for systematic risk factors.
+
+11. **Decile ranking test.** Build portfolios of top-10 vs bottom-10 ranked signals. Measure performance spread. The only true test of ranking quality.
+
+### Deferred
+
+12. Machine learning for insider intent — needs larger sample first.
+13. Committee sector rotation as a policy signal — needs more validation of the concept.
+14. Regime-weighted scoring — experimental label appropriate; keep disabled by default until proven.
 
 ---
 
