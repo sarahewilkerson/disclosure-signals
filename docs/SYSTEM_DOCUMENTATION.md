@@ -267,10 +267,10 @@ Trades where the member's committee jurisdiction matches the stock's GICS sector
 
 ```
 06:00 daily via jobctl (launchd)
-  ├── Score cached insider XMLs (15,091 files → 597 signals)
-  ├── Score cached House PDFs (526 files → 366 signals)
-  ├── Score cached Senate HTML (157 files → 101 signals)
-  ├── Build combined overlay (3 cross-source results)
+  ├── Score cached insider XMLs (15,091 files)
+  ├── Score cached House PDFs (526 files)
+  ├── Score cached Senate HTML (157 files)
+  ├── Build combined overlay
   ├── Generate daily brief (10 sections)
   ├── Save brief to /tmp/disclosure-monitor-sp500-v2-logs/
   └── Email via iCloud+ SMTP to configured recipients
@@ -377,7 +377,7 @@ CONGRESS_API_KEY=<congress.gov-api-key>
 
 ## Testing
 
-- **114 tests** across 29 test files
+- **113 passing tests** across 29 test files (+ 1 pre-existing environment-specific failure)
 - Covers: parsing, scoring, resolution, overlay, pipeline, validation, daily brief, web dashboard, committees, backtest
 - 1 pre-existing failure (`test_legacy_references_are_quarantined` — `rg` shell shim issue)
 - Run: `.venv/bin/python -m pytest tests/ -k "not test_legacy_references"`
